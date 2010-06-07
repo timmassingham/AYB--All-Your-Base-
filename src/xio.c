@@ -146,6 +146,7 @@ int xnotnull_file(XFILE * fp){
 }
 
 void xfclose(XFILE * fp){
+    if(NULL==fp){ return; }
     if(!_xinit){initialise_aybstd();}
     if( ! xnotnull_file(fp) ){return;}
 
@@ -206,7 +207,7 @@ size_t xfread(void *ptr, size_t size, size_t nmemb, XFILE *fp){
     return ret; 
 }
 
-size_t xfwrite(const void * restrict ptr, const size_t size, const size_t nmemb, XFILE * fp){
+size_t xfwrite( void * restrict ptr, const size_t size, const size_t nmemb, XFILE * fp){
     if(!_xinit){initialise_aybstd();}
     size_t ret = 0;
 
@@ -232,7 +233,7 @@ int xfputc ( int c, XFILE * fp){
     return ret;
 }
 
-int xfputs ( const char * restrict str, XFILE * fp){
+int xfputs ( char * restrict str, XFILE * fp){
     if(!_xinit){initialise_aybstd();}
     int ret = EOF;
     switch(fp->mode){

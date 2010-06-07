@@ -18,28 +18,8 @@
  *  along with AYB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _AYB_OPTIONS_H
-#define _AYB_OPTIONS_H
-
-#include <stdint.h>
-#include <stdio.h>
 #include "utility.h"
 
-extern unsigned int NOUTPUTFORMAT;
-extern CSTRING output_format_str[];
-
-enum output_format_enum { OUTPUT_FASTA, OUTPUT_FASTQ, OUTPUT_QSEQ, OUTPUT_INVALID};
-
-typedef struct {
-    CSTRING machine_name;
-    uint32_t run_number,lane,tile;
-    enum output_format_enum output_format;
-    uint32_t niter;
-    real_t mu;
-    FILE * output_fp;
-    CSTRING coordinate_file;
-} AYBOPT;
-
-
-#endif /* _AYB_OPTIONS_H */
+const unsigned int NOUTPUTFORMAT = 3;
+const CSTRING output_format_str[] = { "fasta", "fastq", "qseq", "invalid" };
 

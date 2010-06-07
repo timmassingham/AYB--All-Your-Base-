@@ -43,12 +43,12 @@ XFILE_MODE guess_mode_from_filename ( const char * restrict fn );
 
 // Functions to read / write as binary
 size_t xfread(void *ptr, size_t size, size_t nmemb, XFILE *fp);
-size_t xfwrite(const void *ptr, size_t size, size_t nmemb, XFILE * fp);
+size_t xfwrite(void *ptr, size_t size, size_t nmemb, XFILE * fp);
 
 
 // Basic string functions
 int xfputc( int c, XFILE * fp);
-int xfputs( const char * restrict str, XFILE * fp);
+int xfputs( char * restrict str, XFILE * fp);
 int xfprintf( XFILE * fp, const char * fmt, ... );
 
 int xfgetc(XFILE * fp);

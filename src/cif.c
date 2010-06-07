@@ -333,11 +333,13 @@ bool consistent_cif_headers( const CIFDATA cif1, const CIFDATA cif2 ){
 }
 
 CIFDATA cif_add_file( const char * fn, const XFILE_MODE mode, CIFDATA cif ){
+   CIFDATA newheader = NULL;
+   XFILE * ayb_fp = NULL;
    if ( NULL==fn){ goto cif_add_error;}
-   XFILE * ayb_fp = xfopen(fn,mode,"rb");
+   ayb_fp = xfopen(fn,mode,"rb");
    if ( NULL==ayb_fp){ goto cif_add_error;}
 
-   CIFDATA newheader = readCifHeader(ayb_fp);
+   newheader = readCifHeader(ayb_fp);
    if ( NULL==newheader ){ goto cif_add_error;}
    if ( NULL==cif->intensity.i8 ){ 
       cif->ncluster = newheader->ncluster;
@@ -355,11 +357,13 @@ CIFDATA cif_add_file( const char * fn, const XFILE_MODE mode, CIFDATA cif ){
        default: errx(EXIT_FAILURE,"Incorrect datasize in %s (%s:%d)\n",__func__,__FILE__,__LINE__);
    }
    readCifIntensities(ayb_fp,newheader,mem);
+   xfclose(ayb_fp);
 
    free_cif(newheader);
    return cif;
 
 cif_add_error:
+   xfclose(ayb_fp);
    free_cif(newheader);
    free_cif(cif);
    return NULL;

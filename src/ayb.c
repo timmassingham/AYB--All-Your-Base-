@@ -54,9 +54,20 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->lambda = new_MAT(ncluster,1);
     ayb->we = new_MAT(ncluster,1);
     ayb->cycle_var = new_MAT(ncycle,1);
-    if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M || NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda){
+
+    // Filtering
+    ayb->filtered = false;
+    ayb->passed_filter = calloc(ncluster,sizeof(bool));
+
+    ayb->index = 0;
+    ayb->readnum = 0;    
+    
+    if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M ||
+        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter){
         goto cleanup;
     }
+    
+    ayb->coordinates = NULL;
 
     return ayb;
     
@@ -76,6 +87,8 @@ void free_AYB(AYB ayb){
     free_MAT(ayb->we);
     free_MAT(ayb->cycle_var);
     free_MAT(ayb->lambda);
+    xfree(ayb->passed_filter);
+    free_COORD(ayb->coordinates);
     xfree(ayb);
 }
 
@@ -113,7 +126,20 @@ AYB copy_AYB(const AYB ayb){
     
     ayb_copy->lambda = copy_MAT(ayb->lambda);
     if(NULL!=ayb->lambda && NULL==ayb_copy->lambda){ goto cleanup;}
-
+    
+    ayb_copy->filtered = ayb->filtered;
+    ayb_copy->passed_filter = calloc(ayb->ncluster,sizeof(bool));
+    if(NULL==ayb_copy->passed_filter){ goto cleanup;}
+    for ( int32_t i=0 ; i<ayb->ncluster ; i++){
+        ayb_copy->passed_filter[i] = ayb->passed_filter[i];
+    }
+    
+    ayb_copy->coordinates = copy_COORD(ayb->coordinates);
+    if(NULL==ayb_copy->coordinates && NULL==ayb->coordinates){ goto cleanup;}
+    
+    ayb_copy->index = ayb->index;
+    ayb_copy->readnum = ayb->readnum;
+    
     return ayb_copy;
 
 cleanup:

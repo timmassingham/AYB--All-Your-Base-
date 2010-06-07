@@ -18,28 +18,22 @@
  *  along with AYB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _AYB_OPTIONS_H
-#define _AYB_OPTIONS_H
+#ifndef _COORDINATE_H
+#define _COORDINATE_H
 
-#include <stdint.h>
-#include <stdio.h>
 #include "utility.h"
 
-extern unsigned int NOUTPUTFORMAT;
-extern CSTRING output_format_str[];
-
-enum output_format_enum { OUTPUT_FASTA, OUTPUT_FASTQ, OUTPUT_QSEQ, OUTPUT_INVALID};
-
 typedef struct {
-    CSTRING machine_name;
-    uint32_t run_number,lane,tile;
-    enum output_format_enum output_format;
-    uint32_t niter;
-    real_t mu;
-    FILE * output_fp;
-    CSTRING coordinate_file;
-} AYBOPT;
+    uint16_t lane,tile;
+    uint32_t ncluster;
+    uint16_t *x, *y;
+} * COORD;
 
+COORD new_COORD(const uint32_t ncluster);
+void * free_COORD(COORD coord);
+COORD copy_COORD( const COORD coord);
+void show_COORD( FILE * fp, const COORD coord);
 
-#endif /* _AYB_OPTIONS_H */
+COORD read_coordinates(const CSTRING str, const uint32_t ncluster);
 
+#endif /* _COORDINATE_H */

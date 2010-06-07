@@ -24,6 +24,7 @@
 #include "cif.h"
 #include "matrix.h"
 #include "nuc.h"
+#include "coordinates.h"
 
 #define X(A) A ## int16_t
 #include "array.def"
@@ -37,6 +38,12 @@ typedef struct {
     ARRAY(PHREDCHAR) quals;
     MAT M,P,N,lambda;
     MAT we, cycle_var;
+    // Information about filtering
+    bool filtered;
+    bool * passed_filter;
+    // coordinates
+    COORD coordinates;
+    uint16_t index, readnum;
 } * AYB;
 
 /* Basic functions */
