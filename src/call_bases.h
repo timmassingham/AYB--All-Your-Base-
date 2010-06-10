@@ -25,6 +25,7 @@ struct basequal { NUC base; PHREDCHAR qual;};
 
 NUC call_base_simple( const real_t * restrict p);
 struct basequal call_base( const real_t * restrict p, const real_t lambda, const MAT omega);
+void call_likelihoods(const real_t * restrict p,const real_t lambda,const MAT omega,real_t * like);
 
 MAT * calculate_covariance(const AYB ayb);
 

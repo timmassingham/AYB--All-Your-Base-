@@ -51,7 +51,7 @@ MAT process_intensities(const int16_t * intensities, const MAT Minv_t, const MAT
         for( uint32_t base=0 ; base<NBASE ; base++){ // Bases (rows of Minv, cols of Minv_t)
             real_t dp=0;
             for ( uint32_t chan=0 ; chan<NBASE ; chan++){  // Channels
-                dp += Minv_t->x[base*NBASE+chan] * (intensities[icol*NBASE+chan]-N->x[icol*NBASE+chan]);
+                dp += Minv_t->x[base*NBASE+chan] * (intensities[icol*NBASE+chan] - N->x[icol*NBASE+chan]);
             }
             for ( uint32_t pcol=0 ; pcol<ncycle ; pcol++){ // Columns of p
                 p->x[pcol*NBASE+base] += Pinv_t->x[icol*ncycle+pcol] * dp;

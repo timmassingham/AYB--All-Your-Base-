@@ -28,7 +28,7 @@
 extern unsigned int NOUTPUTFORMAT;
 extern CSTRING output_format_str[];
 
-enum output_format_enum { OUTPUT_FASTA, OUTPUT_FASTQ, OUTPUT_QSEQ, OUTPUT_INVALID};
+enum output_format_enum { OUTPUT_FASTA, OUTPUT_FASTQ, OUTPUT_QSEQ, OUTPUT_LIKE, OUTPUT_INVALID};
 
 typedef struct {
     CSTRING machine_name;
@@ -37,7 +37,10 @@ typedef struct {
     uint32_t niter;
     real_t mu;
     FILE * output_fp;
-    CSTRING coordinate_file;
+    CSTRING coordinate_file, dump_file_prefix;
+    real_t spike_threshold;
+    bool remove_negative;
+    real_t min_lambda;
 } AYBOPT;
 
 

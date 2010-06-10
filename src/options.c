@@ -20,6 +20,6 @@
 
 #include "utility.h"
 
-const unsigned int NOUTPUTFORMAT = 3;
-const CSTRING output_format_str[] = { "fasta", "fastq", "qseq", "invalid" };
+const unsigned int NOUTPUTFORMAT = 4;
+const CSTRING output_format_str[] = { "fasta", "fastq", "qseq", "likelihood", "invalid" };
 

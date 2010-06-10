@@ -22,7 +22,9 @@
 #include "utility.h"
 #include "matrix.h"
 #include "nuc.h"
+#include "options.h"
 
+extern AYBOPT aybopt;
 
 /* Cauchy weighting function for IWLS */ 
 static inline real_t cauchy(const real_t xsqr, const real_t v){
@@ -63,7 +65,7 @@ real_t estimate_lambdaWLS( const MAT p, const NUC * base, const real_t oldlambda
     }
     
     real_t lambda = numerator / denominator;
-    return (lambda>0.)?lambda:0.;
+    return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
 }
 
 
@@ -108,7 +110,7 @@ real_t estimate_lambdaGWLS( const MAT p, const NUC * base, const real_t oldlambd
     }
     
     real_t lambda = numerator / denominator;
-    return (lambda>0.)?lambda:0.;
+    return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
 }
 
 /*
@@ -131,7 +133,7 @@ real_t estimate_lambdaOLS( const MAT p, const NUC * base){
     }
     
     real_t lambda = numerator / ncycle;
-    return (lambda>0.)?lambda:0.;
+    return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
 }
 
 

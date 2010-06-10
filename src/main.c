@@ -19,12 +19,15 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <getopt.h>
 #include <math.h>
 #include "cif.h"
 #include "ayb.h"
 #include "utility.h"
 #include "options.h"
+#include "call_bases.h"
+#include "process_intensities.h"
 
 #define PROGNAME "AYB"
 
@@ -36,8 +39,9 @@ void fprint_usage( FILE * fp){
 "Call bases for Illumina data\n"
 "\n"
 "Usage:\n"
-"\t" PROGNAME " [-c coordinate_file] [-f format] [-i iterations] [-l lane]\n"
-"\t    [-n machine_name] [-o outfile] [-r run_number] [-t tile] data.cif\n"
+"\t" PROGNAME " [-c coordinate_file] [-d prefix] [-f format] [-i iterations] [-l lane] [-L minlam]\n"
+"\t    [-m mu] [-n machine_name] [-o outfile] [-r run_number] [-s threshold] [-t tile] -z\n"
+"\t    data.cif\n"
 "\t" PROGNAME " --help\n"
 "\t" PROGNAME " --licence\n"
 "\n"
@@ -65,20 +69,32 @@ void fprint_help( FILE * fp){
 "\n"
 "-c, --coordinates file [default: none]\n"
 "\tFile to read coordinates of clusters. Required for qseq output\n"
+"-d, --dump prefix [default: don't dump]\n"
+"\tDump information about run parameters.\n"
 "-f, --format format [default: fastq]\n"
 "\tFormat to output results in. Choices are fasta, fastq and qseq.\n"
 "-i, --iterations niterations [default: 3]\n"
 "\tNumber of iterations of refinement to use.\n"
-"-l, --lane lane [default: from CIF]\n"
+"-l, --lane lane [default: 0]\n"
 "\tLane number for output\n"
+"-L, --lambda lambda [default: 0]\n"
+"\tMinimum allowed lambda\n"
+"-m, --mu value [default: 1e-5]\n"
+"\tMu for quality adjustment\n"
 "-n, --name machine_name [default: unknown]\n"
 "\tName of machine for qseq output\n"
 "-o, --outfile [default: stdout]\n"
 "\tFile to write output to.\n"
 "-r, --run run_number [default: 0]\n"
 "\tRun number for qseq output\n"
-"-t, --tile tile [default: from CIF]\n"
+"-s , --spike threshold [default: don't remove]\n"
+"\tMove spikes by zeroing intensities. If any base in a cycle for\n"
+"a given cluster is greater than threshold then set all intensities\n"
+"to zero.\n"
+"-t, --tile tile [default: 0]\n"
 "\tTile number for output.\n"
+"-z, --zero [default: don't zero]\n"
+"\tZero observations with a negative intensity.\n"
 "-h, --help\n"
 "\tDisplay information about usage and exit.\n"
 "\n"
@@ -89,14 +105,18 @@ void fprint_help( FILE * fp){
 
 static struct option longopts[] = {
     { "coordinates",required_argument, NULL, 'c'},
+    { "dump",       required_argument, NULL, 'd'},
     { "format",     required_argument, NULL, 'f'},
     { "iterations", required_argument, NULL, 'i'},
     { "lane",       required_argument, NULL, 'l'},
+    { "lambda",	    required_argument, NULL, 'L'},
     { "mu",         required_argument, NULL, 'm'},
     { "name",       required_argument, NULL, 'n'},
     { "outfile",    required_argument, NULL, 'o'},
     { "run",        required_argument, NULL, 'r'},
+    { "spike",      required_argument, NULL, 's'},
     { "tile",       required_argument, NULL, 't'},
+    { "zero",       no_argument,       NULL, 'z'},
     { "help",       no_argument,       NULL, 'h' },
     { "licence",    no_argument,       NULL, 0 },
 };
@@ -108,9 +128,13 @@ AYBOPT aybopt = {
     .lane = 0,
     .tile = 0,
     .output_format = OUTPUT_FASTQ,
-    .niter = 3,
+    .niter = 5,
     .mu = 1e-5,
-    .coordinate_file = NULL
+    .coordinate_file = NULL,
+    .dump_file_prefix = NULL,
+    .spike_threshold = 0.,
+    .remove_negative = false,
+    .min_lambda = 0.
 };
 
 
@@ -134,10 +158,15 @@ void parse_arguments( const int argc, char * const argv[] ){
         aybopt.output_fp = stdout;
         
         int ch;
-        while ((ch = getopt_long(argc, argv, "c:f:i:l:m:n:o:r:t:h", longopts, NULL)) != -1){
+        while ((ch = getopt_long(argc, argv, "c:d:f:i:l:L:m:n:o:r:s:t:zh", longopts, NULL)) != -1){
         switch(ch){
             case 'c':  aybopt.coordinate_file = copy_CSTRING(optarg);
                        break;
+	    case 'd':  aybopt.dump_file_prefix = copy_CSTRING(optarg);
+			if(NULL==aybopt.dump_file_prefix){
+			   errx(EXIT_FAILURE,"Failed to parse prefix for dumping");
+			}
+		       break;
             case 'f':  aybopt.output_format = OUTPUT_INVALID;
                        for ( int i=0 ; i<NOUTPUTFORMAT ; i++){
                            if(!strcasecmp(optarg,output_format_str[i])){
@@ -158,8 +187,11 @@ void parse_arguments( const int argc, char * const argv[] ){
                        break;
             case 'l':  aybopt.lane = parse_uint(optarg);
                        break;
+	    case 'L':  aybopt.min_lambda = parse_real(optarg);
+		       if(aybopt.min_lambda<0){ errx(EXIT_FAILURE,"Minimum lambda must be greater than zero.");}
+		       break;
             case 'm':  aybopt.mu = parse_real(optarg);
-                       if(aybopt.mu<0){ errx(EXIT_FAILURE,"Mu mustbe greater than zero.");}
+                       if(aybopt.mu<0){ errx(EXIT_FAILURE,"Mu must be greater than zero.");}
                        break;
             case 'n':  aybopt.machine_name = copy_CSTRING(optarg);
                        break;
@@ -171,8 +203,15 @@ void parse_arguments( const int argc, char * const argv[] ){
                        }
             case 'r':  aybopt.run_number = parse_uint(optarg);
                        break;
+	    case 's':  aybopt.spike_threshold = parse_real(optarg);
+		       if(aybopt.spike_threshold<0){
+			    errx(EXIT_FAILURE,"Threshold for zeroing intensities must be greater than zero");
+		       }
+		       break;
             case 't':  aybopt.tile = parse_uint(optarg);
                        break;
+	    case 'z':  aybopt.remove_negative = true;
+		       break;
             case 'h':
                 fprint_usage(stderr);
                 fprint_help(stderr);
@@ -232,9 +271,11 @@ void dump_qseq( FILE * fp, const AYB ayb){
         errx(EXIT_FAILURE,"Attempting to write qseq output but coordinates not available");
     }
     
+    const uint32_t lane = (aybopt.lane==0)?ayb->coordinates->lane:aybopt.lane;
+    const uint32_t tile = (aybopt.tile==0)?ayb->coordinates->tile:aybopt.tile;
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         // General information about machine
-        fprintf(fp,"%s\t%" SCNu32 "\t%" SCNu32 "\t%" SCNu32 "\t",aybopt.machine_name,aybopt.run_number,aybopt.lane,aybopt.tile);
+        fprintf(fp,"%s\t%" SCNu32 "\t%" SCNu32 "\t%" SCNu32 "\t",aybopt.machine_name,aybopt.run_number,lane,tile);
         // Coordinates of cluster
         fprintf(fp,"%" SCNu16 "\t%" SCNu16 "\t", ayb->coordinates->x[cl], ayb->coordinates->y[cl]); 
         // Write sequence
@@ -259,17 +300,89 @@ void dump_qseq( FILE * fp, const AYB ayb){
     }
 }
 
+/* Refactor: this function repeats much of estimate_Bases in ayb.c */
+void dump_likelihood( FILE * fp, const AYB ayb){
+    validate(NULL!=fp,);
+    validate(NULL!=ayb,);
+    const uint32_t ncycle = ayb->ncycle;
+    const uint32_t ncluster = ayb->ncluster;
+
+    if(!ayb->coordinates){
+	fprintf(stderr,"Attempting to write likelihood output but coordinates not available\nCoordinates will be zero'd.\n");
+    }
+
+    // Calculate variance matrices and invert
+    MAT * V = calculate_covariance(ayb);
+    XFILE * vout = xfopen("information.txt",XFILE_RAW,"w");
+    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
+       MAT a = V[cy];
+       show_MAT(vout,V[cy],0,0);
+       V[cy] = invert(a);
+       free_MAT(a);
+    }
+    xfclose(vout);
+    
+    MAT pcl_int = NULL;
+    MAT Minv_t = transpose_inplace(invert(ayb->M));
+    MAT Pinv_t = transpose_inplace(invert(ayb->P));
+    real_t like[4] = {NAN,NAN,NAN,NAN};
+    for ( uint32_t cl=0 ; cl<ncluster ; cl++){
+       // Process intensities
+       const real_t lambda = ayb->lambda->x[cl];
+       pcl_int = process_intensities(ayb->intensities.elt+cl*ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
+       // Coordinates
+       uint16_t x=0,y=0;
+       if(ayb->coordinates){
+	  x = ayb->coordinates->x[cl];
+	  y = ayb->coordinates->y[cl];
+       }
+       fprintf(fp,"%" SCNu32 "\t%" SCNu32 "\t%" SCNu16 "\t%" SCNu16, aybopt.lane,aybopt.tile,x,y);
+       for ( uint32_t cy=0 ; cy<ncycle ; cy++){
+	  call_likelihoods(pcl_int->x+cy*NBASE,lambda,V[cy],like);
+          fprintf(fp,"\t%3.2f %3.2f %3.2f %3.2f",like[0],like[1],like[2],like[3]);
+       }
+       fputc('\n',fp);
+    }
+    free_MAT(Pinv_t);
+    free_MAT(Minv_t);
+    free_MAT(pcl_int);
+    for(uint32_t cy=0 ; cy<ncycle ; cy++){
+       free_MAT(V[cy]);
+    }
+    free(V);
+}
+
+
+
 void dump_results(FILE * fp, const AYB ayb){
     switch(aybopt.output_format){
     case OUTPUT_FASTA: dump_fasta(fp,ayb); break;
     case OUTPUT_FASTQ: dump_fastq(fp,ayb); break;
     case OUTPUT_QSEQ:  dump_qseq(fp,ayb);  break;
+    case OUTPUT_LIKE:  dump_likelihood(fp,ayb); break;
     default:
         errx(EXIT_FAILURE,"Unrecognised output format %s in %s (%s:%d)\n",
             output_format_str[aybopt.output_format],__func__,__FILE__,__LINE__);
     }
 }
-        
+
+size_t xstrlen( const CSTRING str){
+   return (NULL!=str)?strlen(str):0;
+}
+
+CSTRING xstrcpy( CSTRING dst, const CSTRING src){
+   return (NULL!=src) ? strcpy(dst,src) : NULL;
+}
+
+CSTRING concat_CSTRING( CSTRING str1, const CSTRING str2){
+   if( NULL==str1 && NULL==str2 ){ return NULL; }
+   const size_t len1 = xstrlen(str1);
+   const size_t tlen = len1 + xstrlen(str2) + 1;
+   str1 = reallocf(str1,tlen*sizeof(char));
+   if(NULL==str1){ return str1;}
+   xstrcpy(str1+len1,str2);
+   return str1;
+}
 
 void analyse_tile( XFILE * fp){
     CIFDATA cif = NULL;
@@ -289,7 +402,40 @@ void analyse_tile( XFILE * fp){
         goto cleanup;
     }
     free_cif(cif);
-    
+
+    // Remove spikes of high intensity
+    if(aybopt.spike_threshold!=0){
+       uint32_t nfailed = 0;
+       for ( uint32_t cl=0 ; cl<ayb->ncluster ; cl++){
+	  for ( uint32_t cy=0 ; cy<ayb->ncycle ; cy++){
+	     const uint32_t offset = (cl*ayb->ncycle+cy)*NBASE;
+	     bool fail_threshold = false;
+	     for ( uint32_t b=0 ; b<NBASE ; b++){
+		if(ayb->intensities.elt[offset+b]>aybopt.spike_threshold){
+		   fail_threshold = true;
+		   break;
+		}
+	     }
+	     if(fail_threshold){
+		for ( uint32_t b=0 ; b<NBASE ; b++){
+		   ayb->intensities.elt[offset+b] = 0.;
+		}
+		nfailed++;
+	     }
+	  }
+       }
+       fprintf(stderr,"Number failing filter = %" SCNu32 "\n",nfailed);
+    }
+    // Remove negative observations
+    if(aybopt.remove_negative){
+       const uint32_t n = ayb->ncluster * ayb->ncycle * NBASE;
+       for ( uint32_t i=0 ; i<n ; i++){
+	  if(ayb->intensities.elt[i]<0.){
+	     ayb->intensities.elt[i] = 0.;
+	  }
+       }
+    }
+ 
     // Read coordinates if necessary
     if(aybopt.coordinate_file!=NULL){
         ayb->coordinates = read_coordinates(aybopt.coordinate_file,ayb->ncluster);
@@ -297,7 +443,7 @@ void analyse_tile( XFILE * fp){
             errx(EXIT_FAILURE,"Failed to read coordinates from %s",aybopt.coordinate_file);
         }
     	if(ayb->coordinates->ncluster != ayb->ncluster){
-        	errx(EXIT_FAILURE,"Number of coorodinates (%" SCNu32 ") disagrees with number of clusters (%" SCNu32, ayb->coordinates->ncluster, ayb->ncluster);
+        	errx(EXIT_FAILURE,"Number of coordinates (%" SCNu32 ") disagrees with number of clusters (%" SCNu32, ayb->coordinates->ncluster, ayb->ncluster);
 	}
     }
     
@@ -311,10 +457,66 @@ void analyse_tile( XFILE * fp){
         timestamp(" * base calling\n",stderr);
         estimate_Bases(ayb);
     }
+
     
     timestamp("Writing results\n",stderr);
-    
     dump_results(aybopt.output_fp,ayb);
+
+    // Want to dump parameters
+    if(aybopt.dump_file_prefix){
+        // Cross-talk
+        CSTRING filename = NULL;
+	filename = concat_CSTRING(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".M.txt");
+        XFILE * fp = xfopen(filename,XFILE_RAW,"w");
+	if(fp){
+            show_MAT(fp,ayb->M,0,0);
+	    xfclose(fp);
+	} else {
+	    fprintf(stderr,"Failed to open %s for output\n",filename);
+	}
+        // Phasing
+        xstrcpy(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".P.txt");
+	fp = xfopen(filename,XFILE_RAW,"w");
+	if(fp){
+	    show_MAT(fp,ayb->P,0,0);
+	    xfclose(fp);
+	} else {
+	    fprintf(stderr,"Failed to open %s for output\n",filename);
+        }
+	// Noise
+        xstrcpy(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".N.txt");
+        fp = xfopen(filename,XFILE_RAW,"w");
+        if(fp){
+            show_MAT(fp,ayb->N,0,0);
+            xfclose(fp);
+        } else {
+	   fprintf(stderr,"Failed to open %s for output\n",filename);
+        }
+	// lambda
+        xstrcpy(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".lambda.txt");
+	fp = xfopen(filename,XFILE_RAW,"w");
+        if(fp){
+            show_MAT(fp,ayb->lambda,0,0);
+            xfclose(fp);
+        } else {
+	    fprintf(stderr,"Failed to open %s for output\n",filename);
+        }
+	// Weights
+	xstrcpy(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".we.txt");
+        fp = xfopen(filename,XFILE_RAW,"w");
+        if(fp){
+            show_MAT(fp,ayb->we,0,0);
+            xfclose(fp);
+        } else {
+	    fprintf(stderr,"Failed to open %s for output\n",filename);
+        }
+	xfree(filename);
+    }
     free_AYB(ayb);
     return;
     
@@ -324,6 +526,7 @@ cleanup:
 }
 
 int main(int argc, char * argv[]){
+    srandom(23413);
     XFILE * fp=NULL;
     parse_arguments(argc,argv);
     argc -= optind;

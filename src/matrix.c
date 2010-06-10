@@ -109,8 +109,8 @@ void show_MAT ( XFILE * fp, const MAT mat, const uint32_t mrow, const uint32_t m
     const uint32_t ncol = mat->ncol;
     const uint32_t maxrow = (mrow!=0 && mrow<nrow)?mrow:nrow;
     const uint32_t maxcol = (mcol!=0 && mcol<ncol)?mcol:ncol;
+    xfprintf(fp,"%d\t%d\n",maxrow,maxcol);
     for( int row=0 ; row<maxrow ; row++){
-        xfprintf(fp,"%d:",row+1);
         for ( int col=0 ; col<maxcol ; col++){
             xfprintf(fp," %#8.2f",mat->x[col*nrow+row]);
         }

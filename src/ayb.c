@@ -243,6 +243,7 @@ real_t update_cluster_weights(AYB ayb){
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         const real_t d = ayb->we->x[cl]-meanLSSi;
         ayb->we->x[cl] = cauchy(d*d,varLSSi);
+	if(ayb->lambda->x[cl]<100.0 || ayb->lambda->x[cl]>600.0){ ayb->we->x[cl]=.0;}
     }
     //xfputs("Cluster weights:\n",xstderr);
     //show_MAT(xstderr,ayb->we,8,1);
@@ -377,7 +378,7 @@ real_t estimate_Bases(AYB ayb){
         for ( uint32_t b=0 ; b<NBASE ; b++){
             ayb->cycle_var->x[cy] += V[cy]->x[b*NBASE+b];
         }
-        ayb->cycle_var->x[cy] = 1./ayb->cycle_var->x[cy];
+        ayb->cycle_var->x[cy] = ayb->cycle_var->x[cy];
     }
 
     // Invert variance matrices
@@ -392,7 +393,6 @@ real_t estimate_Bases(AYB ayb){
     MAT Pinv_t = transpose_inplace(invert(ayb->P));
 
 //timestamp("Base calling loop\n",stderr);
-    real_t * tmp = calloc(ncycle*NBASE,sizeof(real_t));
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         NUC * bases = ayb->bases.elt + cl*ncycle;
         PHREDCHAR * quals = ayb->quals.elt + cl*ncycle;
@@ -405,7 +405,6 @@ real_t estimate_Bases(AYB ayb){
         }
         ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
     }    
-    free(tmp);
 //timestamp("Finished base calling\n",stderr);
     
     free_MAT(pcl_int);

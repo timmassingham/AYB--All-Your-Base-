@@ -21,13 +21,13 @@
 #include <assert.h>
 #include <math.h>
 #include <strings.h>
+#include <stdlib.h>
 #include "matrix.h"
 #include "nuc.h"
 #include "process_intensities.h"
 #include "ayb.h"
 #include "call_bases.h"
 #include "options.h"
-
 
 /*
  * Call base from processed intensities using minimum Least Squares.
@@ -43,11 +43,10 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
     extern AYBOPT aybopt;
     
     if(0==lambda){
-        #warning "Should call bases should return random base when lambda=0?"
-        struct basequal b = {0,33};
+        // Return random base with low quality
+        int base = (int)(random()%4);
+        struct basequal b = {base,33};
         return b;
-        // Special case, return random value
-        //return (int)(NBASE*runif());
     }
     
     int call = 0;
@@ -58,6 +57,7 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
         for ( int j=0 ; j<NBASE ; j++){
             stat[i] -= 2.0 * p[j] * omega->x[i*NBASE+j];
         }
+
         if(stat[i]<minstat){
             minstat = stat[i];
             call = i;
@@ -79,13 +79,66 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
      */
     real_t post_prob = (maxprob<aybopt.mu) ?
        // Case probabilities small compared to mu
-       (aybopt.mu + maxprob ) / (4*aybopt.mu + maxprob*tot) :
+       (aybopt.mu + maxprob ) / (4.0*aybopt.mu + maxprob*tot) :
        // Case probabilities large compared to mu
        (aybopt.mu/maxprob + 1.) / (4.0*aybopt.mu/maxprob + tot);
     
     struct basequal b = {call,phredchar_from_prob(post_prob)};
     return b;
 }
+
+
+/* Calculates adjusted -loglikelihood from -loglikelihood
+ * -log(mu+exp(-like))
+ */
+static inline real_t adjust_loglikelihood(const real_t negloglike, const real_t mu){
+   const real_t prob = exp(-negloglike);
+   return (prob>mu)?(negloglike-log1p(-mu/prob)):-(log(mu)-log1p(-prob/mu));
+}
+
+/*
+ * Calculate likelihoods from processed intensities
+ *  p       Processed intensities for given cycle
+ *  lambda  Cluster brightness
+ *  omega   Cycle specific inverse covariance matrix
+ *  like    Vector of 4 reals for writing likelihoods to.
+ *  Likelihoods are stored as -log(likelihood) == 0.5*least-squares statistic
+ * REFACTOR: repeats much of call_base
+ */
+void call_likelihoods ( const real_t * restrict p, const real_t lambda, const MAT omega, real_t * like){
+    assert(NULL!=p);
+    assert(NULL!=omega);
+    assert(NULL!=like);
+    assert(NBASE==omega->nrow);
+    assert(NBASE==omega->ncol);
+    extern AYBOPT aybopt;
+
+    if(0==lambda){
+        for( int i=0 ; i<NBASE ; i++){
+	   like[i] = (aybopt.mu)?-log(aybopt.mu):HUGE_VAL;
+	}
+	return;
+    }
+
+    const real_t K = xMy(p,omega,p);
+    for ( int i=0 ; i<NBASE ; i++){
+        like[i] = lambda * omega->x[i*NBASE+i];
+        for ( int j=0 ; j<NBASE ; j++){
+            like[i] -= 2.0 * p[j] * omega->x[i*NBASE+j];
+        }
+        like[i] = K + like[i]*lambda;
+	like[i] /= 2.0;
+    }
+
+    if ( aybopt.mu ){
+       for ( int i=0 ; i<NBASE ; i++){
+	  like[i] = adjust_loglikelihood(like[i],aybopt.mu);
+       }
+    }
+}
+
+
+
 
     
 /* Maximum of n real_ts, should be moved into utility.h library */
@@ -135,8 +188,9 @@ MAT * accumulate_covariance( const real_t we, const MAT p, const real_t lambda, 
     }
     // Perform accululation. V += R R^t
     // Note: R = P - \lambda I_b, where I_b is unit vector with b'th elt = 1
-    //  so R R^t = P P^t - \lambda I_b P^t
-    //                   - \lambda P I_b^t + \lambda^2 I_b I_b^2
+    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
+        p->x[cy*NBASE+base[cy]] -= lambda;
+    }
     for ( uint32_t cycle=0 ; cycle<ncycle ; cycle++){
         const int cybase = base[cycle];
         validate(cybase<NBASE,NULL);
@@ -146,17 +200,6 @@ MAT * accumulate_covariance( const real_t we, const MAT p, const real_t lambda, 
                 V[cycle]->x[i*NBASE+j] += we * p->x[cycle*NBASE+i] * p->x[cycle*NBASE+j];
             }
         }
-        // \lambda I_b P^t and \lambda P I_b^t
-        for ( uint32_t i=0 ; i<NBASE ; i++){
-            V[cycle]->x[cybase*NBASE+i] -= we * lambda * p->x[cycle*NBASE+i];
-            V[cycle]->x[i*NBASE+cybase] -= we * lambda * p->x[cycle*NBASE+i];
-        }
-        // \lambda^2 I_b I_b^t
-        V[cycle]->x[cybase*NBASE+cybase] += we * lambda*lambda;
-    }
-    // Create residuals
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        p->x[cy*NBASE+base[cy]] -= lambda;
     }
 
     return V;
