@@ -331,7 +331,8 @@ MAT calculatePlhs( const real_t wbar, const MAT Sbar, const MAT Mt, const MAT J,
     const int nbase = NBASE;
     
     if(NULL==lhs){
-        lhs = new_MAT(NBASE+ncycle,NBASE+ncycle);
+        //lhs = new_MAT(NBASE+ncycle,NBASE+ncycle);
+	lhs = new_MAT(ncycle,ncycle);
         validate(NULL!=lhs,NULL);
     }
     bzero(lhs->x,lhs->nrow*lhs->ncol*sizeof(real_t));
@@ -342,10 +343,10 @@ MAT calculatePlhs( const real_t wbar, const MAT Sbar, const MAT Mt, const MAT J,
     gemv(LAPACK_TRANS,&J->nrow,&J->ncol,&alpha,J->x,&J->nrow,tmp+ncycle*ncycle,LAPACK_UNIT,&beta,tmp,LAPACK_UNIT);
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for ( uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            lhs->x[cy*lda+cy2] = tmp[cy*ncycle+cy2];
+            lhs->x[cy*ncycle+cy2] = tmp[cy*ncycle+cy2];
         }
     }
-    // M %*% Sbar
+/*    // M %*% Sbar
     gemm(LAPACK_TRANS,LAPACK_NOTRANS,&nbase,&ncycle,&nbase,&alpha,Mt->x,&nbase,Sbar->x,&nbase,&beta,lhs->x+ncycle,&lda);
     // Copy M %*% Sbar  into new bit of array
 {
@@ -363,7 +364,7 @@ MAT calculatePlhs( const real_t wbar, const MAT Sbar, const MAT Mt, const MAT J,
     for ( uint32_t base=0 ; base<NBASE ; base++){
         lhs->x[offset+base*lda+base] = wbar;
     }
-}
+}*/
     
     return lhs;
 }
@@ -379,9 +380,10 @@ MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT K, real_t * tmp, MAT 
     const real_t  beta = 0.0;
 
     const uint32_t ncycle = Ibar->ncol;
-    const int lda = NBASE + ncycle;
+    //const int lda = NBASE + ncycle;
     if(NULL==rhs){
-        rhs = new_MAT(lda,ncycle);
+        //rhs = new_MAT(lda,ncycle);
+	rhs = new_MAT(ncycle,ncycle);
         validate(NULL!=rhs,NULL);
     }
     bzero(rhs->x,rhs->nrow*rhs->ncol*sizeof(real_t));
@@ -390,15 +392,16 @@ MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT K, real_t * tmp, MAT 
     gemv(LAPACK_TRANS,&K->nrow,&K->ncol,&alpha,K->x,&K->nrow,Mt->x,LAPACK_UNIT,&beta,tmp,LAPACK_UNIT);
     for ( uint32_t cy1=0 ; cy1<ncycle ; cy1++){
         for ( uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            rhs->x[cy1*lda+cy2] = tmp[cy1*ncycle+cy2];
+            rhs->x[cy1*ncycle+cy2] = tmp[cy1*ncycle+cy2];
         }
     }
+/*
     // Copy in Ibar
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for ( uint32_t base=0 ; base<NBASE ; base++){
             rhs->x[ncycle+cy*lda+base] = Ibar->x[cy*NBASE+base];
         }
-    }
+    }*/
     return rhs;
 }
 
@@ -431,6 +434,28 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
     gelss(&lhs->nrow,&lhs->ncol,&rhs->ncol,lhs->x,&lhs->nrow,
                       rhs->x,&rhs->nrow,tmp,&RCOND,&RANK,tmp+N,&IWORK,&INFO);
     return INFO;
+}
+
+void nnls_(double *A, int * MDA, int * M, int* N, double * B, double * X, double * RNORM, double * W, double * ZZ, int * INDEX, int * MODE);
+
+int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
+    const int N = lhs->nrow;
+    real_t RNORM;
+    real_t W[N];
+    real_t ZZ[N];
+    int INDEX[N],MODE;
+
+    double * lhs_tmp = malloc(lhs->nrow*lhs->ncol*sizeof(double));
+    double * rhs_tmp = malloc(rhs->nrow*sizeof(double));
+    for( int cy=0 ; cy<N ; cy++){
+        memcpy(lhs_tmp,lhs->x,lhs->nrow*lhs->ncol*sizeof(double));
+        memcpy(rhs_tmp,rhs->x+cy*N,rhs->nrow*sizeof(double));
+        nnls_(lhs_tmp,&N,&N,&N,rhs_tmp,tmp+cy*N,&RNORM,W,ZZ,INDEX,&MODE);
+    }
+    fprintf(stdout,"Solution result = %d\n",MODE);
+    free(lhs_tmp);
+    free(rhs_tmp);
+    return MODE;
 }
 
 #ifdef TEST
