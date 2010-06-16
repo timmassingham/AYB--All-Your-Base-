@@ -73,7 +73,7 @@ void fprint_help( FILE * fp){
 "\tDump information about run parameters.\n"
 "-f, --format format [default: fastq]\n"
 "\tFormat to output results in. Choices are fasta, fastq and qseq.\n"
-"-i, --iterations niterations [default: 3]\n"
+"-i, --iterations niterations [default: 5]\n"
 "\tNumber of iterations of refinement to use.\n"
 "-l, --lane lane [default: 0]\n"
 "\tLane number for output\n"
