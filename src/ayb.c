@@ -243,7 +243,6 @@ real_t update_cluster_weights(AYB ayb){
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         const real_t d = ayb->we->x[cl]-meanLSSi;
         ayb->we->x[cl] = cauchy(d*d,varLSSi);
-	if(ayb->lambda->x[cl]<100.0 || ayb->lambda->x[cl]>600.0){ ayb->we->x[cl]=.0;}
     }
     //xfputs("Cluster weights:\n",xstderr);
     //show_MAT(xstderr,ayb->we,8,1);
