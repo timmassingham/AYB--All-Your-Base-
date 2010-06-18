@@ -1,4 +1,4 @@
-       double precision FUNCTION DIFF(X,Y)
+       double precision FUNCTION DDIFF(X,Y)
 c
 c  Function used in tests that depend on machine precision.
 c
@@ -9,11 +9,11 @@ c  "SOLVING LEAST SQUARES PROBLEMS", Prentice-HalL, 1974.
 c  Revised FEB 1995 to accompany reprinting of the book by SIAM.
 C
       double precision X, Y
-      DIFF=X-Y  
+      DDIFF=X-Y  
       RETURN
       END   
 
-      SUBROUTINE G1 (A,B,CTERM,STERM,SIG)   
+      SUBROUTINE DG1 (A,B,CTERM,STERM,SIG)   
 c
 C     COMPUTE ORTHOGONAL ROTATION MATRIX..  
 c
@@ -57,7 +57,7 @@ C     ------------------------------------------------------------------
       END   
 
 
-      SUBROUTINE G2    (CTERM,STERM,X,Y)
+      SUBROUTINE DG2    (CTERM,STERM,X,Y)
 c
 C  APPLY THE ROTATION COMPUTED BY G1 TO (X,Y).  
 c
@@ -75,48 +75,9 @@ c     ------------------------------------------------------------------
       RETURN
       END 
   
-            double precision FUNCTION   GEN(ANOISE)
-c
-C  GENERATE NUMBERS FOR CONSTRUCTION OF TEST CASES. 
-c
-c  The original version of this code was developed by
-c  Charles L. Lawson and Richard J. Hanson at Jet Propulsion Laboratory
-c  1972 DEC 15, and published in the book
-c  "SOLVING LEAST SQUARES PROBLEMS", Prentice-HalL, 1974.
-c  Revised FEB 1995 to accompany reprinting of the book by SIAM.
-c     ------------------------------------------------------------------
-      integer I, J, MI, MJ
-      double precision AI, AJ, ANOISE, ZERO
-      parameter(ZERO = 0.0d0)
-      SAVE
-c     ------------------------------------------------------------------
-      IF (ANOISE) 10,30,20  
-   10 MI=891
-      MJ=457
-      I=5   
-      J=7   
-      AJ= ZERO
-      GEN= ZERO
-      RETURN
-C   
-C     THE SEQUENCE OF VALUES OF J  IS BOUNDED BETWEEN 1 AND 996 
-C     IF INITIAL J = 1,2,3,4,5,6,7,8, OR 9, THE PERIOD IS 332   
-   20 J=J*MJ
-      J=J-997*(J/997)   
-      AJ=J-498  
-C     THE SEQUENCE OF VALUES OF I  IS BOUNDED BETWEEN 1 AND 999 
-C     IF INITIAL I = 1,2,3,6,7, OR 9,  THE PERIOD WILL BE 50
-C     IF INITIAL I = 4 OR 8   THE PERIOD WILL BE 25 
-C     IF INITIAL I = 5        THE PERIOD WILL BE 10 
-   30 I=I*MI
-      I=I-1000*(I/1000) 
-      AI=I-500  
-      GEN=AI+AJ*ANOISE  
-      RETURN
-      END   
 
 
-C     SUBROUTINE H12 (MODE,LPIVOT,L1,M,U,IUE,UP,C,ICE,ICV,NCV)  
+C     SUBROUTINE DH12 (MODE,LPIVOT,L1,M,U,IUE,UP,C,ICE,ICV,NCV)  
 C   
 C  CONSTRUCTION AND/OR APPLICATION OF A SINGLE   
 C  HOUSEHOLDER TRANSFORMATION..     Q = I + U*(U**T)/B   
@@ -152,7 +113,7 @@ C     ICV    STORAGE INCREMENT BETWEEN VECTORS IN C().
 C     NCV    NUMBER OF VECTORS IN C() TO BE TRANSFORMED. IF NCV .LE. 0  
 C            NO OPERATIONS WILL BE DONE ON C(). 
 C     ------------------------------------------------------------------
-      SUBROUTINE H12 (MODE,LPIVOT,L1,M,U,IUE,UP,C,ICE,ICV,NCV)  
+      SUBROUTINE DH12 (MODE,LPIVOT,L1,M,U,IUE,UP,C,ICE,ICV,NCV)  
 C     ------------------------------------------------------------------
       integer I, I2, I3, I4, ICE, ICV, INCR, IUE, J
       integer L1, LPIVOT, M, MODE, NCV
@@ -208,7 +169,7 @@ C
   130 RETURN
       END   
 
-C     SUBROUTINE NNLS  (A,MDA,M,N,B,X,RNORM,W,ZZ,INDEX,MODE)
+C     SUBROUTINE DNNLS  (A,MDA,M,N,B,X,RNORM,W,ZZ,INDEX,MODE)
 C   
 C  Algorithm NNLS: NONNEGATIVE LEAST SQUARES
 C   
@@ -257,7 +218,7 @@ C                   EITHER M .LE. 0 OR N .LE. 0.
 C             3    ITERATION COUNT EXCEEDED.  MORE THAN 3*N ITERATIONS. 
 C   
 C     ------------------------------------------------------------------
-      SUBROUTINE NNLS (A,MDA,M,N,B,X,RNORM,W,ZZ,INDEX,MODE) 
+      SUBROUTINE DNNLS (A,MDA,M,N,B,X,RNORM,W,ZZ,INDEX,MODE) 
 C     ------------------------------------------------------------------
       integer I, II, IP, ITER, ITMAX, IZ, IZ1, IZ2, IZMAX, J, JJ, JZ, L
       integer M, MDA, MODE,N, NPP1, NSETP, RTNKEY
@@ -328,21 +289,21 @@ C     BEGIN THE TRANSFORMATION AND CHECK NEW DIAGONAL ELEMENT TO AVOID
 C     NEAR LINEAR DEPENDENCE.   
 C   
       ASAVE=A(NPP1,J)   
-      CALL H12 (1,NPP1,NPP1+1,M,A(1,J),1,UP,DUMMY,1,1,0)    
+      CALL DH12 (1,NPP1,NPP1+1,M,A(1,J),1,UP,DUMMY,1,1,0)    
       UNORM=ZERO
       IF (NSETP .ne. 0) then
           DO 90 L=1,NSETP   
    90       UNORM=UNORM+A(L,J)**2     
       endif
       UNORM=sqrt(UNORM) 
-      IF (DIFF(UNORM+ABS(A(NPP1,J))*FACTOR,UNORM) .gt. ZERO) then
+      IF (DDIFF(UNORM+ABS(A(NPP1,J))*FACTOR,UNORM) .gt. ZERO) then
 C   
 C        COL J IS SUFFICIENTLY INDEPENDENT.  COPY B INTO ZZ, UPDATE ZZ
 C        AND SOLVE FOR ZTEST ( = PROPOSED NEW VALUE FOR X(J) ).    
 C   
          DO 120 L=1,M  
   120        ZZ(L)=B(L)    
-         CALL H12 (2,NPP1,NPP1+1,M,A(1,J),1,UP,ZZ,1,1,1)   
+         CALL DH12 (2,NPP1,NPP1+1,M,A(1,J),1,UP,ZZ,1,1,1)   
          ZTEST=ZZ(NPP1)/A(NPP1,J)  
 C   
 C                                     SEE IF ZTEST IS POSITIVE  
@@ -376,7 +337,7 @@ C
       IF (IZ1 .le. IZ2) then
          DO 160 JZ=IZ1,IZ2 
             JJ=INDEX(JZ)  
-            CALL H12 (2,NSETP,NPP1,M,A(1,J),1,UP,A(1,JJ),1,MDA,1)
+            CALL DH12 (2,NSETP,NPP1,M,A(1,J),1,UP,A(1,JJ),1,MDA,1)
   160    continue
       endif
 C   
@@ -444,12 +405,12 @@ C
          DO 280 J=JJ,NSETP 
             II=INDEX(J)   
             INDEX(J-1)=II 
-            CALL G1 (A(J-1,II),A(J,II),CC,SS,A(J-1,II))   
+            CALL DG1 (A(J-1,II),A(J,II),CC,SS,A(J-1,II))   
             A(J,II)=ZERO  
             DO 270 L=1,N  
                IF (L.NE.II) then
 c
-c                 Apply procedure G2 (CC,SS,A(J-1,L),A(J,L))  
+c                 Apply procedure DG2 (CC,SS,A(J-1,L),A(J,L))  
 c
                   TEMP = A(J-1,L)
                   A(J-1,L) = CC*TEMP + SS*A(J,L)
@@ -457,7 +418,7 @@ c
                endif
   270       CONTINUE  
 c
-c                 Apply procedure G2 (CC,SS,B(J-1),B(J))   
+c                 Apply procedure DG2 (CC,SS,B(J-1),B(J))   
 c
             TEMP = B(J-1)
             B(J-1) = CC*TEMP + SS*B(J)    

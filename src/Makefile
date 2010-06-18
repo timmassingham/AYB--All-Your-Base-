@@ -7,7 +7,7 @@ LDFLAGS = -lm -lz -lbz2 -lblas -llapack -lgfortran
 INCFLAGS = 
 #DEFINES = -D_GNU_SOURCE __linux
 DEFINES = -DHAS_REALLOCF
-objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o nnls.o
+objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o dnnls.o
 
 all: ayb
 

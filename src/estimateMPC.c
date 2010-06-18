@@ -436,7 +436,7 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
     return INFO;
 }
 
-void nnls_(double *A, int * MDA, int * M, int* N, double * B, double * X, double * RNORM, double * W, double * ZZ, int * INDEX, int * MODE);
+void dnnls_(double *A, int * MDA, int * M, int* N, double * B, double * X, double * RNORM, double * W, double * ZZ, int * INDEX, int * MODE);
 
 int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
     const int N = lhs->nrow;
@@ -450,7 +450,7 @@ int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
     for( int cy=0 ; cy<N ; cy++){
         memcpy(lhs_tmp,lhs->x,lhs->nrow*lhs->ncol*sizeof(double));
         memcpy(rhs_tmp,rhs->x+cy*N,rhs->nrow*sizeof(double));
-        nnls_(lhs_tmp,&N,&N,&N,rhs_tmp,tmp+cy*N,&RNORM,W,ZZ,INDEX,&MODE);
+        dnnls_(lhs_tmp,&N,&N,&N,rhs_tmp,tmp+cy*N,&RNORM,W,ZZ,INDEX,&MODE);
     }
     fprintf(stdout,"Solution result = %d\n",MODE);
     free(lhs_tmp);
