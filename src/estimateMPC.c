@@ -221,11 +221,11 @@ MAT calculateMlhs( const MAT var, const real_t wbar, const MAT SbarT, const MAT 
     bzero(lhs->x,lhs->nrow*lhs->ncol*sizeof(real_t));
 
     const uint32_t lda = NBASE+ncycle;    
-    // Reshape Jvec(P diag(var) Pt) via P diag(sqrt(v)) %*% ( P diag(sqrt(v)) )^t
+    // Reshape Jvec(P diag(1/var) Pt) via P diag(sqrt(v)) %*% ( P diag(sqrt(v)) )^t
     // Scale P
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for (uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            P->x[cy*ncycle+cy2] *= sqrt(var->x[cy]);
+            P->x[cy*ncycle+cy2] /= sqrt(var->x[cy]);
         }
     }
     gemm(LAPACK_NOTRANS,LAPACK_TRANS,&ncycle,&ncycle,&ncycle,&alpha,P->x,&ncycle,P->x,&ncycle,&beta,tmp+NBASE*NBASE,&ncycle);
@@ -238,15 +238,15 @@ MAT calculateMlhs( const MAT var, const real_t wbar, const MAT SbarT, const MAT 
     // Unscale P
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for (uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            P->x[cy*ncycle+cy2] /= sqrt(var->x[cy]);
+            P->x[cy*ncycle+cy2] *= sqrt(var->x[cy]);
         }
     }
     
-    // Sbar %*% P %*% diag(var)
+    // Sbar %*% P %*% diag(1/var)
     gemm(LAPACK_TRANS,LAPACK_NOTRANS,&SbarT->ncol,&P->ncol,&P->nrow,&alpha,SbarT->x,&SbarT->nrow,P->x,&P->nrow,&beta,lhs->x+NBASE*lda,&lhs->nrow);
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for ( uint32_t base=0 ; base<NBASE ; base++){
-            lhs->x[NBASE*lda+cy*lda+base] *= var->x[cy];
+            lhs->x[NBASE*lda+cy*lda+base] /= var->x[cy];
         }
     }
     // Copy Sbar %*% P into new bit of array
@@ -263,7 +263,7 @@ MAT calculateMlhs( const MAT var, const real_t wbar, const MAT SbarT, const MAT 
 {
     const uint32_t offset = NBASE*lda+NBASE;
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        lhs->x[offset+cy*lda+cy] = wbar*var->x[cy];
+        lhs->x[offset+cy*lda+cy] = wbar/var->x[cy];
     }
 }
     
@@ -293,7 +293,7 @@ MAT calculateMrhs( const MAT var, const MAT IbarT, const MAT P, const MAT Kt, re
     // Scale P
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for (uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            P->x[cy*ncycle+cy2] *= var->x[cy];
+            P->x[cy*ncycle+cy2] /= var->x[cy];
         }
     }
     gemv(LAPACK_TRANS,&Kt->nrow,&Kt->ncol,&alpha,Kt->x,&Kt->nrow,P->x,LAPACK_UNIT,&beta,tmp,LAPACK_UNIT);
@@ -305,14 +305,14 @@ MAT calculateMrhs( const MAT var, const MAT IbarT, const MAT P, const MAT Kt, re
     // Unscale P
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for (uint32_t cy2=0 ; cy2<ncycle ; cy2++){
-            P->x[cy*ncycle+cy2] /= var->x[cy];
+            P->x[cy*ncycle+cy2] *= var->x[cy];
         }
     }
     
     // Copy in diag(v)*IbarT
     for ( uint32_t base=0 ; base<NBASE ; base++){
         for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-            rhs->x[NBASE+base*lda+cy] = IbarT->x[base*ncycle+cy] * var->x[cy];
+            rhs->x[NBASE+base*lda+cy] = IbarT->x[base*ncycle+cy] / var->x[cy];
         }
     }
     return rhs;
