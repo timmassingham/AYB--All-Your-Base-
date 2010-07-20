@@ -300,7 +300,7 @@ real_t estimate_MPC( AYB ayb ){
         solveNonneg(plhs,prhs,tmp);
         for ( uint32_t i=0 ; i<ncycle ; i++){
             for(uint32_t j=0 ; j<ncycle ; j++){
-                matP->x[i*ncycle+j] = tmp[i*ncycle+j];
+                matP->x[i*ncycle+j] = prhs->x[i*ncycle+j];
             }
         }
 

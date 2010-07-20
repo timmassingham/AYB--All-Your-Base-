@@ -452,7 +452,8 @@ int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
         memcpy(rhs_tmp,rhs->x+cy*N,rhs->nrow*sizeof(double));
         dnnls_(lhs_tmp,&N,&N,&N,rhs_tmp,tmp+cy*N,&RNORM,W,ZZ,INDEX,&MODE);
     }
-    fprintf(stdout,"Solution result = %d\n",MODE);
+    memcpy(rhs->x,tmp,N*N*sizeof(double));
+
     free(lhs_tmp);
     free(rhs_tmp);
     return MODE;
