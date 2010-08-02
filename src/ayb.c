@@ -289,7 +289,7 @@ real_t estimate_MPC( AYB ayb ){
     const uint32_t lda = NBASE + ncycle;
     real_t det=0.;
 //xfprintf(xstderr,"Starting\tdelta = %e\n",calculateDeltaLSE( matMt, matP, matN, J, K, tmp));
-    for( uint32_t i=0 ; i<AYB_NITER ; i++){
+    for( uint32_t it=0 ; it<AYB_NITER ; it++){
         /*
          *  Solution for phasing and constant noise
          */
