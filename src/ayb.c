@@ -298,14 +298,10 @@ real_t estimate_MPC( AYB ayb ){
         solverSVD(plhs,prhs,tmp);
         for ( uint32_t i=0 ; i<ncycle ; i++){
             for(uint32_t j=0 ; j<ncycle ; j++){
-                matP->x[i*ncycle+j] = prhs->x[i*lda+j];
+                matP->x[i*ncycle+j] = (prhs->x[i*ncycle+j]>=0.)?prhs->x[i*ncycle+j]:0.;
             }
         }
-        for ( uint32_t i=0 ; i<ncycle ; i++){
-            for(uint32_t j=0 ; j<NBASE ; j++){
-                matN->x[i*NBASE+j] = prhs->x[i*lda+ncycle+j];
-            }
-        }
+
         // Scaling so det(P) = 1
         det = normalise_MAT(matP,3e-8);
         scale_MAT(J,det*det); scale_MAT(Jt,det*det);

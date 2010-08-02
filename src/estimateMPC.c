@@ -331,40 +331,22 @@ MAT calculatePlhs( const real_t wbar, const MAT Sbar, const MAT Mt, const MAT J,
     const int nbase = NBASE;
     
     if(NULL==lhs){
-        lhs = new_MAT(NBASE+ncycle,NBASE+ncycle);
+        lhs = new_MAT(ncycle,ncycle);
         validate(NULL!=lhs,NULL);
     }
     bzero(lhs->x,lhs->nrow*lhs->ncol*sizeof(real_t));
 
-    const int lda = NBASE+ncycle;    
+    const int lda = ncycle;    
     // Reshape Jtvec(MtM)
     gemm(LAPACK_NOTRANS, LAPACK_TRANS,&nbase, &nbase, &nbase, &alpha,Mt->x,&nbase, Mt->x,  &nbase, &beta, tmp+ncycle*ncycle,&nbase);
     gemv(LAPACK_TRANS,&J->nrow,&J->ncol,&alpha,J->x,&J->nrow,tmp+ncycle*ncycle,LAPACK_UNIT,&beta,tmp,LAPACK_UNIT);
+    // Copy redundent now?
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         for ( uint32_t cy2=0 ; cy2<ncycle ; cy2++){
             lhs->x[cy*lda+cy2] = tmp[cy*ncycle+cy2];
         }
     }
-    // M %*% Sbar
-    gemm(LAPACK_TRANS,LAPACK_NOTRANS,&nbase,&ncycle,&nbase,&alpha,Mt->x,&nbase,Sbar->x,&nbase,&beta,lhs->x+ncycle,&lda);
-    // Copy M %*% Sbar  into new bit of array
-{
-    const uint32_t offset1 = lda * ncycle;
-    const uint32_t offset2 = ncycle;
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        for ( uint32_t base=0 ; base<NBASE ; base++){
-            lhs->x[offset1+base*lda+cy] = lhs->x[offset2+cy*lda+base];
-        }
-    }
-}
-    // Id matrix
-{
-    const uint32_t offset = ncycle*lda+ncycle;
-    for ( uint32_t base=0 ; base<NBASE ; base++){
-        lhs->x[offset+base*lda+base] = wbar;
-    }
-}
-    
+
     return lhs;
 }
 
@@ -379,7 +361,7 @@ MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT K, real_t * tmp, MAT 
     const real_t  beta = 0.0;
 
     const uint32_t ncycle = Ibar->ncol;
-    const int lda = NBASE + ncycle;
+    const int lda = ncycle;
     if(NULL==rhs){
         rhs = new_MAT(lda,ncycle);
         validate(NULL!=rhs,NULL);
@@ -393,12 +375,7 @@ MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT K, real_t * tmp, MAT 
             rhs->x[cy1*lda+cy2] = tmp[cy1*ncycle+cy2];
         }
     }
-    // Copy in Ibar
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        for ( uint32_t base=0 ; base<NBASE ; base++){
-            rhs->x[ncycle+cy*lda+base] = Ibar->x[cy*NBASE+base];
-        }
-    }
+
     return rhs;
 }
 
