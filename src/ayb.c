@@ -392,13 +392,15 @@ real_t estimate_Bases(AYB ayb){
         NUC * bases = ayb->bases.elt + cl*ncycle;
         PHREDCHAR * quals = ayb->quals.elt + cl*ncycle;
         pcl_int = process_intensities(ayb->intensities.elt+cl*ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
-        ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
+        //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
+        ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
         for ( uint32_t cy=0 ; cy<ncycle ; cy++){
             struct basequal bq = call_base(pcl_int->x+cy*NBASE,ayb->lambda->x[cl],V[cy]);
             bases[cy] = bq.base;
             quals[cy] = bq.qual;
         }
-        ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
+        //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
+        ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
     }    
 //timestamp("Finished base calling\n",stderr);
     
