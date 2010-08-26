@@ -63,7 +63,7 @@ void F77_NAME(sgetrf)(const int * M, const int * N, float * A, const int * lda,
                  int * ipiv, int * info);
 
 void F77_NAME(sgetri)(const int * N, float * A, const int * lda, const int * ipiv,
-                 double * work, const int * lwork, int * info);
+                 float * work, const int * lwork, int * info);
 
 
 // Double functions
