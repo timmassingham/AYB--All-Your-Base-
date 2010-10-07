@@ -107,7 +107,7 @@ real_t qual_from_prob( real_t prob){
 }
 
 PHREDCHAR phredchar_from_quality( real_t qual){
-   real_t c= 32+qual;
+   real_t c= 33+qual;
    if(c<MIN_PHRED){c=MIN_PHRED;}
    if(c>MAX_PHRED){c=MAX_PHRED;}
    return (PHREDCHAR)(c+0.5);
@@ -120,8 +120,8 @@ PHREDCHAR phredchar_from_char( const char c){
 }
 
 PHREDCHAR phredchar_from_prob( real_t p){
-    //validate(isprob(p),ERR_PHRED);
-    real_t c = 32-10*log1p(-p)/log(10);
+    validate(isprob(p),ERR_PHRED);
+    real_t c = 33-10*log1p(-p)/log(10);
     if(c<MIN_PHRED){c=MIN_PHRED;}
     if(c>MAX_PHRED){c=MAX_PHRED;}
     return (PHREDCHAR)(c+0.5);
