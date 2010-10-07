@@ -5,6 +5,7 @@ CFLAGS = -m64 -Wall -ffast-math -O4 -funroll-loops -DNDEBUG -fomit-frame-pointer
 LD = ld
 LDFLAGS = -L. -lgfortran -lm -lz -lbz2 -lblas -llapack -lg2c
 INCFLAGS = 
+MANDIR = ../man
 DEFINES = -D_GNU_SOURCE -D__linux
 #DEFINES = -DHAS_REALLOCF
 objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o dnnls.o
@@ -22,7 +23,20 @@ ayb: $(objects)
 	g77 -m64 -O3 -o $@ -c $<
 
 clean:
-	rm -f ../bin/* *~ *.o  *.obj  *.exe *.lib
+	rm -f ../bin/* *~ *.o  *.obj  *.exe *.lib ../man/*.1 ../man/*.1.html
 
-archive: clean
+%.1: %.1.txt
+	cd $(MANDIR); a2x -d manpage -f manpage $<
+
+%.1.html: %.1.txt
+	cd $(MANDIR); asciidoc -d manpage $<
+
+man: man_troff man_html
+
+man_troff: $(MANDIR)/ayb.1
+
+man_html: $(MANDIR)/ayb.1.html
+
+
+archive: clean man
 	cd ../.. && tar zcf ayb.tgz --exclude=.git --exclude=archive --exclude=test AYBc

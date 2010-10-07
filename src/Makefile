@@ -5,6 +5,7 @@ CFLAGS = -std=c99 -Wall -g -std=gnu99 -fstack-protector-all -D_FORTIFY_SOURCE=2 
 LD = ld
 LDFLAGS = -lgfortran -lm -lz -lbz2 -lblas -llapack
 INCFLAGS = 
+MANDIR = ../man
 #DEFINES = -D_GNU_SOURCE __linux
 DEFINES = -DHAS_REALLOCF
 objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o dnnls.o
@@ -22,7 +23,19 @@ ayb: $(objects)
 	gfortran -m64 -O3 -o $@ -c $<
 
 clean:
-	rm -f ../bin/* *~ *.o  *.obj  *.exe *.lib
+	rm -f ../bin/* *~ *.o  *.obj  *.exe *.lib ../man/*.1 ../man/*.1.html
 
-archive: clean
+%.1: %.1.txt
+	cd $(MANDIR); a2x -d manpage -f manpage $<
+
+%.1.html: %.1.txt
+	cd $(MANDIR); asciidoc -d manpage $<
+
+man: man_troff man_html
+
+man_troff: $(MANDIR)/ayb.1
+
+man_html: $(MANDIR)/ayb.1.html
+
+archive: clean man
 	cd ../.. && tar zcf ayb.tgz --exclude=.git --exclude=archive --exclude=test AYBc

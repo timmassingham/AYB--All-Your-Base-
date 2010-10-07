@@ -1,0 +1,102 @@
+ayb(1)
+======
+
+NAME
+----
+AYB - Advanced basecalling for the Illumina sequencing platform
+
+SYNOPSIS
+--------
+
+*ayb*	[-c coordinate_file] [-d prefix] [-f format] [-i iterations] [-l lane] [-L minlam]
+	[-m mu] [-n machine_name] [-o outfile] [-r run_number] [-s threshold] [-t tile] -z
+	data.cif
+
+*ayb* --help
+
+*ayb* --licence
+
+DESCRIPTION
+-----------
+AYB is an advanced basecaller for the Illumina sequencing platform,
+producing basecalls and associated quality measures from raw intensity
+information (CIF format files).
+
+AYB reads intensity data from the file given on the commandline, or
+from stdin if no file is given, and writes the results to stdout
+unless an alternative *-o* outfile is specified. Messages, errors and
+progress indications are written to stderr.
+
+*-c, --coordinates* file [default: none]::
+	File to read coordinates of clusters. Required for qseq output.
+
+*-d, --dump* prefix [default: don't dump]::
+	Dump information about run parameters.
+
+*-f, --format* format [default: fastq]::
+	Format to output results in. Choices are fasta, fastq and qseq.
+
+*-i, --iterations* niterations [default: 5]::
+	Number of iterations of refinement to use.
+
+*-l, --lane* lane [default: 0]::
+	Lane number for output.
+
+*-L, --lambda* lambda [default: 0]::
+	Minimum allowed lambda.
+
+*-m, --mu* value [default: 1e-5]::
+	Mu for quality adjustment.
+
+*-n, --name* machine_name [default: unknown]::
+	Name of machine for qseq output.
+
+*-o, --outfile* outfile [default: stdout]::
+	File to write output to.
+
+*-r, --run* run_number [default: 0]::
+	Run number for qseq output.
+
+*-s , --spike* threshold [default: don't remove]::
+	Move spikes by zeroing intensities. If any base in a cycle for
+a given cluster is greater than threshold then set all intensities
+to zero.
+
+*-t, --tile* tile [default: 0]::
+	Tile number for output.
+
+*-z, --zero*::
+	Set negative observed intensities to zero.
+
+*-h, --help*::
+	Display information about usage and exit.
+
+*--licence*::
+	Display licence terms and exit.
+
+EXAMPLE
+-------
+ayb s_4_0033.cif > s_4_0033.fastq
+
+AUTHOR
+------
+Written by Tim Massingham, tim.massingham@ebi.ac.uk
+
+Contains the Non-Negative Least Squares routine of Charles L. Lawson and 
+Richard J. Hanson (Jet Propulsion Laboratory, 1973). See 
+<http://www.netlib.org/lawson-hanson/> for details.
+
+RESOURCES
+---------
+See <http://www.ebi.ac.uk/goldman/AYB/>.
+
+COPYING
+-------
+Copyright (C) 2010 European Bioinformatics Institute. Free use of this 
+software is granted under the terms of the GNU General Public License 
+(GPL). See the file *COPYING* in the ciftools distribution or  
+<http://www.gnu.org/licenses/gpl.html> for details.
+
+SEE ALSO
+--------
+ciftools(1)
