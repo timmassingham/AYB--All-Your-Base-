@@ -389,6 +389,9 @@ int solver( MAT lhs, MAT rhs){
     validate(lhs->ncol==rhs->nrow,-3);
 
     int info = 0;
+    for ( int i=0 ; i<lhs->nrow ; i++){
+       lhs->x[i*lhs->nrow+i] += 1.;
+    }
     posv(LAPACK_UPPER, &lhs->ncol, &rhs->ncol, lhs->x, &lhs->nrow, rhs->x, &rhs->nrow, &info);
     if(0!=info){ fprintf(stderr,"Error in solver, info = %d\n",info);}
     return info;
@@ -405,10 +408,40 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
     const int N = lhs->nrow;
     int INFO=0,RANK=0,IWORK=5*N;
     double RCOND = 3e-8;
+    for ( int i=0 ; i<N ; i++){
+       lhs->x[i*N+i] += 1.;
+    }
+
     gelss(&lhs->nrow,&lhs->ncol,&rhs->ncol,lhs->x,&lhs->nrow,
                       rhs->x,&rhs->nrow,tmp,&RCOND,&RANK,tmp+N,&IWORK,&INFO);
     return INFO;
 }
+
+
+void dnnls_(double *A, int * MDA, int * M, int* N, double * B, double * X, double * RNORM, double * W, double * ZZ, int * INDEX, int * MODE);
+
+int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
+    const int N = lhs->nrow;
+    const int Nr = rhs->ncol;
+    real_t RNORM;
+    real_t W[N];
+    real_t ZZ[N];
+    int INDEX[N],MODE;
+
+    double * lhs_tmp = malloc(lhs->nrow*lhs->ncol*sizeof(double));
+    double * rhs_tmp = malloc(rhs->nrow*sizeof(double));
+    for( int cy=0 ; cy<Nr ; cy++){
+        memcpy(lhs_tmp,lhs->x,lhs->nrow*lhs->ncol*sizeof(double));
+        memcpy(rhs_tmp,rhs->x+cy*Nr,rhs->nrow*sizeof(double));
+        dnnls_(lhs_tmp,&N,&N,&N,rhs_tmp,tmp+cy*Nr,&RNORM,W,ZZ,INDEX,&MODE);
+    }
+    memcpy(rhs->x,tmp,N*Nr*sizeof(double));
+
+    free(lhs_tmp);
+    free(rhs_tmp);
+    return MODE;
+}
+
 
 #ifdef TEST
 #include <stdio.h>

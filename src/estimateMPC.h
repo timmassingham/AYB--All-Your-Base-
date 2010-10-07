@@ -37,6 +37,7 @@ MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT K, real_t * tmp, MAT 
 real_t calculateDeltaLSE(const MAT Mt, const MAT P, const MAT N, const MAT J, const MAT K, real_t * tmp);
 int solver( MAT lhs, MAT rhs);
 int solverSVD(MAT lhs, MAT rhs, real_t * tmp);
+int solveNonneg(MAT lhs, MAT rhs, real_t *tmp);
 
 
 #endif /* ESTIMATE_MPC_H */
