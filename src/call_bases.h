@@ -21,10 +21,14 @@
 #ifndef _CALL_BASES_H
 #define _CALL_BASES_H
 
-struct basequal { NUC base; PHREDCHAR qual;};
+struct basequal { NUC base; real_t qual;};
 
+void initialise_calibration(void);
 NUC call_base_simple( const real_t * restrict p);
 struct basequal call_base( const real_t * restrict p, const real_t lambda, const MAT omega);
+real_t adjust_quality(const real_t qual, const NUC prior, const NUC base, const NUC next);
+real_t adjust_first_quality(const real_t qual, const NUC base, const NUC next);
+real_t adjust_last_quality(const real_t qual, const NUC prior, const NUC base);
 void call_likelihoods(const real_t * restrict p,const real_t lambda,const MAT omega,real_t * like);
 
 MAT * calculate_covariance(const AYB ayb);

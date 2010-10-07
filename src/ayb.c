@@ -338,6 +338,7 @@ real_t estimate_MPC( AYB ayb ){
 
     // Transpose Mt back to normal form 
     matMt = transpose_inplace(matMt);
+    show_MAT(xstdout,matMt,0,0);
     // Scale lambdas by factor 
     scale_MAT(ayb->lambda,lambdaf);
     
@@ -363,6 +364,7 @@ real_t estimate_MPC( AYB ayb ){
 
 real_t estimate_Bases(AYB ayb){
     validate(NULL!=ayb,NAN);
+    //initialise_calibration();
     const uint32_t ncycle   = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
 //timestamp("Calculating covariance\n",stderr);
@@ -388,17 +390,33 @@ real_t estimate_Bases(AYB ayb){
     MAT Pinv_t = transpose_inplace(invert(ayb->P));
 
 //timestamp("Base calling loop\n",stderr);
+    real_t qual[ncycle];
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         NUC * bases = ayb->bases.elt + cl*ncycle;
-        PHREDCHAR * quals = ayb->quals.elt + cl*ncycle;
+        PHREDCHAR * phred = ayb->quals.elt + cl*ncycle;
         pcl_int = process_intensities(ayb->intensities.elt+cl*ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
+	// Call bases
         for ( uint32_t cy=0 ; cy<ncycle ; cy++){
             struct basequal bq = call_base(pcl_int->x+cy*NBASE,ayb->lambda->x[cl],V[cy]);
             bases[cy] = bq.base;
-            quals[cy] = bq.qual;
+            qual[cy] = bq.qual;
         }
+	// Calibrate qualities
+	// First cycle
+	qual[0] = adjust_first_quality(qual[0],bases[0],bases[1]);
+	// Middle cycles
+	for ( uint32_t cy=1 ; cy<(ncycle-1) ; cy++){
+	   qual[cy] = adjust_quality(qual[cy],bases[cy-1],bases[cy],bases[cy+1]);
+	}
+	// Last cycle
+	qual[ncycle-1] = adjust_last_quality(qual[ncycle-1],bases[ncycle-2],bases[ncycle-1]);
+	// Create Phred
+	for ( uint32_t cy=0 ; cy<ncycle ; cy++){
+	   phred[cy] = phredchar_from_quality(qual[cy]);
+	}
+
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
     }    

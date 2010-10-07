@@ -29,6 +29,8 @@
 #include "call_bases.h"
 #include "options.h"
 
+#include "tables/newcalibrationS2.tab"
+
 /*
  * Call base from processed intensities using minimum Least Squares.
  *  p       Processed intensities for given cycle
@@ -43,8 +45,7 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
     extern AYBOPT aybopt;
     
     if(0==lambda){
-        // Return random base with low quality
-        int base = (int)(random()%4);
+	int base = 0;
         struct basequal b = {base,33};
         return b;
     }
@@ -57,6 +58,7 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
         for ( int j=0 ; j<NBASE ; j++){
             stat[i] -= 2.0 * p[j] * omega->x[i*NBASE+j];
         }
+	stat[i] *= lambda;
 
         if(stat[i]<minstat){
             minstat = stat[i];
@@ -68,11 +70,11 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
      */
     real_t tot = 0.;
     for ( int i=0 ; i<NBASE ; i++){
-        tot += exp(-0.5*lambda*(stat[i]-minstat));
+        tot += exp(-0.5*(stat[i]-minstat));
     }
 
     real_t K = xMy(p,omega,p);
-    real_t maxprob = exp(-0.5*(K+lambda*minstat));
+    real_t maxprob = exp(-0.5*(K+minstat));
 
     /* Calculate posterior probability in numerically stable fashion
      * Note that maxp can be extremely small.
@@ -82,9 +84,21 @@ struct basequal call_base( const real_t * restrict p, const real_t lambda, const
        (aybopt.mu + maxprob ) / (4.0*aybopt.mu + maxprob*tot) :
        // Case probabilities large compared to mu
        (aybopt.mu/maxprob + 1.) / (4.0*aybopt.mu/maxprob + tot);
-    
-    struct basequal b = {call,phredchar_from_prob(post_prob)};
+   
+    struct basequal b = {call,qual_from_prob(post_prob)};
     return b;
+}
+
+real_t adjust_quality(const real_t qual, const NUC prior, const NUC base, const NUC next){
+   return calibration_intercept + calibration_scale * qual + calibration_baseprior_adj[prior*NBASE+base] + calibration_basenext_adj[next*NBASE+base] + calibration_priorbasenext_adj[(next*NBASE+prior)*NBASE+base];
+}
+
+real_t adjust_first_quality(const real_t qual, const NUC base, const NUC next){
+   return calibration_intercept + calibration_scale * qual + calibration_basenext_adj[next*NBASE+base];
+}
+
+real_t adjust_last_quality(const real_t qual, const NUC prior, const NUC base){
+   return calibration_intercept + calibration_scale * qual + calibration_baseprior_adj[prior*NBASE+base];
 }
 
 
@@ -246,6 +260,7 @@ MAT * calculate_covariance( const AYB ayb){
             V[cy]->x[i] /= wesum;
         }
     }
+
     return V;
 }
 
