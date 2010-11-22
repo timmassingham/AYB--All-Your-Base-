@@ -294,7 +294,7 @@ real_t estimate_MPC( AYB ayb ){
          *  Solution for phasing and constant noise
          */
         plhs = calculatePlhs(Wbar,Sbar,matMt,J,tmp,plhs);
-        prhs = calculatePrhs(Ibar,matMt,K,tmp,prhs);
+        prhs = calculatePrhs(Ibar,matMt,Sbar,matN,K,tmp,prhs);
         solverSVD(plhs,prhs,tmp);
         for ( uint32_t i=0 ; i<ncycle ; i++){
             for(uint32_t j=0 ; j<ncycle ; j++){
