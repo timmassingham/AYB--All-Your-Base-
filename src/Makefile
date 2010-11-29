@@ -1,6 +1,6 @@
 CC = gcc
-#CFLAGS = -Wall -ffast-math -O4 -funroll-loops -DNDEBUG -fomit-frame-pointer -std=gnu99 -msse2 -Wno-unused-function -fstrict-aliasing 
-CFLAGS = -std=c99 -Wall -g -std=gnu99 -fstack-protector-all -D_FORTIFY_SOURCE=2 -Wno-unused-function
+CFLAGS = -Wall -ffast-math -O4 -funroll-loops -DNDEBUG -fomit-frame-pointer -std=gnu99 -msse2 -Wno-unused-function -fstrict-aliasing 
+#CFLAGS = -std=c99 -Wall -g -std=gnu99 -fstack-protector-all -D_FORTIFY_SOURCE=2 -Wno-unused-function
 #CFLAGS = -O3 -pg -std=gnu99 
 LD = ld
 LDFLAGS = -lgfortran -lm -lz -lbz2 -lblas -llapack
