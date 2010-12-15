@@ -338,7 +338,6 @@ real_t estimate_MPC( AYB ayb ){
 
     // Transpose Mt back to normal form 
     matMt = transpose_inplace(matMt);
-    show_MAT(xstdout,matMt,0,0);
     // Scale lambdas by factor 
     scale_MAT(ayb->lambda,lambdaf);
     
