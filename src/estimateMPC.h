@@ -25,9 +25,13 @@
 #include "nuc.h"
 
 MAT calculateIbar( const ARRAY(int16_t) intmat, const MAT we, MAT Ibar);
+MAT calculateIbarLambda( const ARRAY(int16_t) intmat, const MAT lambda, const MAT we, MAT Ibar);
 MAT calculateSbar( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle, MAT Sbar);
+MAT calculateSbarLambda( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle , MAT Sbar);
 MAT calculateWe( const MAT lssi, MAT we);
 real_t calculateWbar( const MAT we);
+real_t calculateWbarLambda( const MAT we, const MAT lambda);
+real_t calculateWbarLambdaSqr( const MAT we, const MAT lambda);
 MAT calculateJ( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle, MAT J);
 MAT calculateK( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const ARRAY(int16_t) ints, const uint_fast32_t ncycle, MAT K);
 MAT calculateMlhs( const MAT var, const real_t wbar, const MAT SbarT, const MAT P, const MAT Jt, real_t * tmp, MAT lhs);
@@ -39,8 +43,10 @@ int solver( MAT lhs, MAT rhs);
 int solverSVD(MAT lhs, MAT rhs, real_t * tmp);
 int solveNonneg(MAT lhs, MAT rhs, real_t *tmp);
 
-MAT calculateRhs( const MAT K, const MAT Sbar, MAT rhs);
-MAT calculateLhs( const real_t wbar,const MAT J, const MAT Ibar, MAT lhs);
+//MAT calculateRhs( const MAT K, const MAT Sbar, MAT rhs);
+MAT calculateRhs( const MAT K, const MAT Ibar, const MAT IbarLam, MAT rhs);
+//MAT calculateLhs( const real_t wbar,const MAT J, const MAT Ibar, MAT lhs);
+MAT calculateLhs( const real_t wbar, const real_t wbarLam, const real_t wbarLamSqr, const MAT J, const MAT Sbar, const MAT SbarLam, MAT lhs);
 MAT calculateNewK(const MAT lambda, const ARRAY(NUC) bases,const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newK);
 //MAT calculateNewJ(const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newJ);
 MAT calculateNewJ(const MAT lambda, const ARRAY(NUC) bases, const MAT we, const int ncycle, MAT newJ);

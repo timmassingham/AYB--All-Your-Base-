@@ -26,8 +26,8 @@
 
 MAT process_intensities(const int16_t * intensities, const MAT Minv_t, const MAT Pinv_t, const MAT N, MAT p);
 MAT expected_intensities( const real_t lambda, const NUC * bases, const MAT M, const MAT P, const MAT N, MAT e);
-MAT processNew( const struct structLU AtLU, const MAT N, const int16_t * intensities, MAT p);
-MAT expectedNew(const MAT A, const MAT N, const NUC * bases, MAT e);
+MAT processNew( const struct structLU AtLU, const MAT N, const MAT lamN, const real_t lambda, const int16_t * intensities, MAT p);
+MAT expectedNew(const MAT A, const MAT N, const MAT lamN, const real_t lambda, const NUC * bases, MAT e);
 
 #endif /* _PROCESS_INTENSITIES_H */
 

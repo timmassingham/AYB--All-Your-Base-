@@ -67,6 +67,7 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->M = new_MAT(NBASE,NBASE);
     ayb->P = new_MAT(ncycle,ncycle);
     ayb->N = new_MAT(NBASE,ncycle);
+    ayb->lamN = new_MAT(NBASE,ncycle);
     ayb->At = new_MAT(NBASE*ncycle,NBASE*ncycle);
     ayb->lambda = new_MAT(ncluster,1);
     ayb->we = new_MAT(ncluster,1);
@@ -80,7 +81,8 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->readnum = 0;    
     
     if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M ||
-        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || NULL==ayb->At){
+        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || 
+	NULL==ayb->At|| NULL==ayb->lamN){
         goto cleanup;
     }
     
@@ -102,6 +104,7 @@ void free_AYB(AYB ayb){
     free_MAT(ayb->P);
     free_MAT(ayb->N);
     free_MAT(ayb->At);
+    free_MAT(ayb->lamN);
     free_MAT(ayb->we);
     free_MAT(ayb->cycle_var);
     free_MAT(ayb->lambda);
@@ -138,6 +141,9 @@ AYB copy_AYB(const AYB ayb){
     
     ayb_copy->At = copy_MAT(ayb->At);
     if(NULL!=ayb->At && NULL==ayb_copy->At){ goto cleanup;}
+
+    ayb_copy->lamN = copy_MAT(ayb->lamN);
+    if(NULL!=ayb->lamN && NULL==ayb_copy->lamN){ goto cleanup;}
     
     ayb_copy->we = copy_MAT(ayb->we);
     if(NULL!=ayb->we && NULL==ayb_copy->we){ goto cleanup;}
@@ -219,6 +225,7 @@ AYB initialise_AYB(const CIFDATA cif){
     copyinto_MAT(ayb->At,initial_At);
     /* Initial noise is zero */
     set_MAT(ayb->N,0.);
+    set_MAT(ayb->lamN,0.);
     /* Initial phasing */
     #warning "Phasing not properly initialised yet"
     ayb->P = identity_MAT(ayb->ncycle);
@@ -232,7 +239,7 @@ AYB initialise_AYB(const CIFDATA cif){
     struct structLU AtLU = LUdecomposition(ayb->At);
     timestamp("Processing clusters\n",stderr);
     for ( uint32_t cl=0 ; cl<ayb->ncluster ; cl++){
-	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+	pcl_int =  processNew( AtLU, ayb->N, ayb->lamN, ayb->lambda->x[cl],ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
         NUC * cl_bases = ayb->bases.elt + cl*ayb->ncycle;
         PHREDCHAR * cl_quals = ayb->quals.elt + cl*ayb->ncycle;
         for ( uint32_t cy=0 ; cy<ayb->ncycle ; cy++){
@@ -240,7 +247,7 @@ AYB initialise_AYB(const CIFDATA cif){
             cl_quals[cy] = 33;
         }
         //ayb->lambda->x[cl] = estimate_lambdaOLS(pcl_int,cl_bases);
-	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N,ayb->At, cl_bases,  ayb->ncycle);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->lamN, ayb->At, cl_bases,  ayb->ncycle);
     }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
@@ -263,7 +270,7 @@ real_t update_cluster_weights(AYB ayb){
         ayb->we->x[cl] = 0.;
         int16_t * cycle_ints  = ayb->intensities.elt + cl*ncycle*NBASE;
         NUC *     cycle_bases = ayb->bases.elt + cl*ncycle;
-        e = processNew( AtLU, ayb->N, cycle_ints, e);
+        e = processNew( AtLU, ayb->N, ayb->lamN, ayb->lambda->x[cl], cycle_ints, e);
         for ( int i=0 ; i<ncycle ; i++){
                 e->x[i*NBASE+cycle_bases[i]] -= ayb->lambda->x[cl];
         }
@@ -311,13 +318,17 @@ real_t estimate_MPC( AYB ayb ){
     MAT K = calculateNewK(ayb->lambda,ayb->bases,ayb->intensities,ayb->we,ncycle,NULL);
     //timestamp("Others\n",stderr);
     MAT Sbar = calculateSbar(ayb->lambda,ayb->we,ayb->bases,ncycle,NULL);
+    MAT SbarLam = calculateSbarLambda(ayb->lambda,ayb->we,ayb->bases,ncycle,NULL);
     MAT Ibar = calculateIbar(ayb->intensities,ayb->we,NULL);
+    MAT IbarLam = calculateIbarLambda(ayb->intensities,ayb->lambda,ayb->we,NULL);
     real_t Wbar = calculateWbar(ayb->we);
+    real_t WbarLam = calculateWbarLambda(ayb->we,ayb->lambda);
+    real_t WbarLamSqr = calculateWbarLambdaSqr(ayb->we,ayb->lambda);
     real_t lambdaf = 1.;
     real_t * tmp = calloc(ncycle*ncycle*NBASE*NBASE,sizeof(real_t));
   
-    MAT lhs = calculateLhs(Wbar, J, Sbar, NULL); 
-    MAT rhs = calculateRhs( K, Ibar, NULL);
+    MAT lhs = calculateLhs(Wbar, WbarLam, WbarLamSqr, J, Sbar, SbarLam, NULL); 
+    MAT rhs = calculateRhs( K, Ibar, IbarLam, NULL);
     for ( int i=0 ; i<lhs->nrow ; i++){
 	    lhs->x[i*lhs->nrow+i] += ridgeConst;
     }
@@ -332,7 +343,8 @@ real_t estimate_MPC( AYB ayb ){
         for( int j=0 ;j<rhs->ncol ; j++){
 	    ayb->At->x[i*ayb->At->nrow+j] = rhs->x[i*rhs->nrow+j];
 	}
-	ayb->N->x[i] = rhs->x[i*rhs->nrow+rhs->nrow-1];
+	ayb->N->x[i] = rhs->x[i*rhs->nrow+rhs->nrow-2];
+	ayb->lamN->x[i] = rhs->x[i*rhs->nrow+rhs->nrow-1];
     }
 
     //real_t delta = calculateDeltaLSE( matMt, matP, matN, J, K, tmp);
@@ -347,7 +359,9 @@ real_t estimate_MPC( AYB ayb ){
     free_MAT(lhs);
     xfree(tmp);
     free_MAT(Ibar);
+    free_MAT(IbarLam);
     free_MAT(Sbar);
+    free_MAT(SbarLam);
     free_MAT(K);
     
     //xfprintf(xstderr,"Initial %e\tImprovement %e\t = %e\n",sumLSS,delta,sumLSS-delta);
@@ -384,10 +398,10 @@ real_t estimate_Bases(AYB ayb){
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         NUC * bases = ayb->bases.elt + cl*ncycle;
         PHREDCHAR * phred = ayb->quals.elt + cl*ncycle;
-	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+	pcl_int =  processNew( AtLU, ayb->N, ayb->lamN, ayb->lambda->x[cl], ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
-	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->lamN, ayb->At, bases,  ayb->ncycle);
 	// Call bases
 	const int lda = 4*ncycle;
 	call_base(pcl_int,ayb->lambda->x[cl],gblOmega,bases);
@@ -395,7 +409,7 @@ real_t estimate_Bases(AYB ayb){
 
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
-	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->lamN, ayb->At, bases,  ayb->ncycle);
     }   
 //timestamp("Finished base calling\n",stderr);
     

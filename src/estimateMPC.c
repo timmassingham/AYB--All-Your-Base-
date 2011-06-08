@@ -58,37 +58,43 @@ MAT calculateWe( const MAT lssi, MAT we){
     return we;
 }
 
-MAT calculateLhs( const real_t wbar,const MAT J, const MAT Sbar, MAT lhs){
-	if( NULL==J || NULL==Sbar){ return NULL; }
+MAT calculateLhs( const real_t wbar, const real_t wbarLam, const real_t wbarLamSqr, const MAT J, const MAT Sbar, const MAT SbarLam, MAT lhs){
+	if( NULL==J || NULL==Sbar || NULL==SbarLam){ return NULL; }
 	if(NULL==lhs){
-		lhs = new_MAT(J->nrow+1,J->nrow+1);
+		lhs = new_MAT(J->nrow+2,J->nrow+2);
 		if(NULL==lhs){ return NULL;}
 	}
-	const int lda = J->nrow+1;
+	const int lda = J->nrow+2;
 	const int nelt = J->nrow;
 	for ( int i=0 ; i<nelt ; i++){
 		for ( int j=0 ; j<nelt ; j++){
 			lhs->x[i*lda+j] = J->x[i*nelt+j];
 		}
 		lhs->x[i*lda+nelt] = Sbar->x[i];
+		lhs->x[i*lda+nelt+1] = SbarLam->x[i];
 		lhs->x[nelt*lda+i] = Sbar->x[i];
+		lhs->x[(nelt+1)*lda+i] = SbarLam->x[i];
 	}
-	lhs->x[lda*lda-1] = wbar;
+	lhs->x[nelt*lda+nelt] = wbar;
+	lhs->x[nelt*lda+nelt+1] = wbarLam;
+	lhs->x[(nelt+1)*lda+nelt] = wbarLam;
+	lhs->x[lda*lda-1] = wbarLamSqr;
 	return lhs;
 }
 
-MAT calculateRhs( const MAT K, const MAT Ibar, MAT rhs){
-	if( NULL==K || NULL==Ibar ){ return NULL; }
+MAT calculateRhs( const MAT K, const MAT Ibar, const MAT IbarLam, MAT rhs){
+	if( NULL==K || NULL==Ibar || NULL==IbarLam){ return NULL; }
 	if( NULL==rhs){
-		rhs = new_MAT(K->nrow+1,K->nrow);
+		rhs = new_MAT(K->nrow+2,K->nrow);
 	}
 	const int nelt = K->nrow;
-	const int lda = K->nrow+1;
+	const int lda = K->nrow+2;
 	for ( int i=0 ; i<nelt ; i++){
 		for ( int j=0 ; j<nelt ; j++){
 			rhs->x[i*lda+j] = K->x[i*nelt+j];
 		}
 		rhs->x[i*lda+nelt] = Ibar->x[i];
+		rhs->x[i*lda+nelt+1] = IbarLam->x[i];
 	}
 	return rhs;
 }
@@ -191,6 +197,31 @@ MAT calculateIbar( const ARRAY(int16_t) intmat, const MAT we, MAT Ibar){
     return Ibar;
 }
 
+MAT calculateIbarLambda( const ARRAY(int16_t) intmat, const MAT lambda, const MAT we, MAT Ibar){
+    validate(NULL!=intmat.elt,NULL);
+    validate(NULL!=we,NULL);
+    validate(NULL!=lambda,NULL);
+    const uint_fast32_t ncluster = we->nrow;
+
+    const uint_fast32_t ncycle = intmat.nelt/(ncluster*NBASE);
+    if(NULL==Ibar){
+        Ibar = new_MAT(NBASE,ncycle);
+        validate(NULL!=Ibar,NULL);
+    }
+    validate(Ibar->nrow==NBASE,NULL);
+    validate(Ibar->ncol==ncycle,NULL);
+    bzero(Ibar->x,Ibar->nrow*Ibar->ncol*sizeof(real_t));
+   
+    for( uint_fast32_t cl=0 ; cl<ncluster ; cl++){
+        for( uint_fast32_t idx=0 ; idx<NBASE*ncycle ; idx++){
+            Ibar->x[idx] += intmat.elt[cl*NBASE*ncycle+idx] * we->x[cl] * lambda->x[cl];
+        }
+    }
+   
+    return Ibar;
+}
+
+
 MAT calculateSbar( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle, MAT Sbar){
     validate(NULL!=lambda,NULL);
     validate(NULL!=we,NULL);
@@ -214,6 +245,32 @@ MAT calculateSbar( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const
     
     return Sbar;
 }
+
+MAT calculateSbarLambda( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle , MAT Sbar){
+    validate(NULL!=lambda,NULL);
+    validate(NULL!=we,NULL);
+    validate(NULL!=bases.elt,NULL);
+    const uint_fast32_t ncluster = lambda->nrow;
+    validate(ncluster==we->nrow,NULL);
+    if(NULL==Sbar){
+        Sbar = new_MAT(NBASE,ncycle);
+        validate(NULL!=Sbar,NULL);
+    }
+    validate(Sbar->nrow==NBASE,NULL);
+    validate(Sbar->ncol==ncycle,NULL);
+    bzero(Sbar->x,Sbar->nrow*Sbar->ncol*sizeof(real_t));
+
+    for ( uint_fast32_t cl=0 ; cl<ncluster ; cl++){
+        for ( uint_fast32_t cy=0 ; cy<ncycle ; cy++){
+            int base = bases.elt[cl*ncycle+cy];
+            Sbar->x[cy*NBASE+base] += we->x[cl] * lambda->x[cl] * lambda->x[cl];
+        }
+    }
+   
+    return Sbar;
+}
+
+
 real_t calculateWbar( const MAT we){
     validate(NULL!=we,NAN);
     const uint_fast32_t ncluster = we->nrow;
@@ -224,6 +281,32 @@ real_t calculateWbar( const MAT we){
     }
     return wbar;
 }
+
+real_t calculateWbarLambda( const MAT we, const MAT lambda){
+    validate(NULL!=we,NAN);
+    validate(NULL!=lambda,NAN);
+    const uint_fast32_t ncluster = we->nrow;
+
+    real_t wbar = 0.;
+    for ( uint_fast32_t cl=0 ; cl<ncluster ; cl++){
+        wbar += we->x[cl] * lambda->x[cl];
+    }
+    return wbar;
+}
+
+real_t calculateWbarLambdaSqr( const MAT we, const MAT lambda){
+    validate(NULL!=we,NAN);
+    validate(NULL!=lambda,NAN);
+    const uint_fast32_t ncluster = we->nrow;
+
+    real_t wbar = 0.;
+    for ( uint_fast32_t cl=0 ; cl<ncluster ; cl++){
+        wbar += we->x[cl] * lambda->x[cl] * lambda->x[cl];
+    }
+    return wbar;
+}
+
+
         
 
 MAT calculateJ( const MAT lambda, const MAT we, const ARRAY(NUC) bases, const uint_fast32_t ncycle, MAT J){

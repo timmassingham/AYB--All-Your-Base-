@@ -366,7 +366,7 @@ MAT calculate_covariance( const AYB ayb){
     for ( uint32_t cl=0 ; cl<ncluster; cl++){
         const int16_t * cl_intensities = ayb->intensities.elt+cl*ncycle*NBASE;
         const NUC * cl_bases = ayb->bases.elt + cl*ncycle; 
-	p =  processNew( AtLU, ayb->N, cl_intensities,p);
+	p =  processNew( AtLU, ayb->N, ayb->lamN, ayb->lambda->x[cl], cl_intensities,p);
         validate(NULL!=p,NULL);
         V = accumulate_covariance(ayb->we->x[cl],p,ayb->lambda->x[cl],cl_bases,V);
         validate(NULL!=V,NULL);

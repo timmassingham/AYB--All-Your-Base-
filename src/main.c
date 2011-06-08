@@ -329,7 +329,7 @@ void dump_likelihood( FILE * fp, const AYB ayb){
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
        // Process intensities
        const real_t lambda = ayb->lambda->x[cl];
-       pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+       pcl_int =  processNew( AtLU, ayb->N, ayb->lamN, ayb->lambda->x[cl], ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
        // Coordinates
        uint16_t x=0,y=0;
        if(ayb->coordinates){
@@ -482,6 +482,16 @@ void analyse_tile( XFILE * fp){
         } else {
 	   fprintf(stderr,"Failed to open %s for output\n",filename);
         }
+	// lambda Noise
+	xstrcpy(filename,aybopt.dump_file_prefix);
+	filename = concat_CSTRING(filename,".lamN.txt");
+	fp = xfopen(filename,XFILE_RAW,"w");
+	if(fp){
+		show_MAT(fp,ayb->lamN,0,0);
+		xfclose(fp);
+	} else {
+		fprintf(stderr,"Failed to open %s for output\n",filename);
+	}
 	// lambda
         xstrcpy(filename,aybopt.dump_file_prefix);
 	filename = concat_CSTRING(filename,".lambda.txt");

@@ -114,7 +114,7 @@ real_t estimate_lambdaGWLS( const MAT p, const NUC * base, const real_t oldlambd
     return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
 }
 
-real_t estimate_lambda_A ( const int16_t * intensity, const MAT N, const MAT At, const NUC * base, const int ncycle){
+real_t estimate_lambda_A ( const int16_t * intensity, const MAT N, const MAT lamN, const MAT At, const NUC * base, const int ncycle){
 	real_t As[NBASE*ncycle];
 	const int lda = NBASE*ncycle;
 	for ( int i=0 ; i<lda ; i++){
@@ -123,6 +123,7 @@ real_t estimate_lambda_A ( const int16_t * intensity, const MAT N, const MAT At,
 			const int idx = j*NBASE+base[j];
 			As[i] += At->x[i*lda+idx];
 		}
+		As[i] += lamN->x[i];
 	}
 	real_t sAAs = 0.0;
 	real_t sAy = 0.0;
