@@ -39,6 +39,12 @@
     #define real_format_str "%lf"
 #endif
 
+#ifdef INSTRUMENT
+   #define instrument(A) { A; }
+#else
+   #define instrument(A)
+#endif
+
 #ifndef HAS_REALLOCF
 static void * reallocf(void * ptr, size_t t){
         void * ptr2;

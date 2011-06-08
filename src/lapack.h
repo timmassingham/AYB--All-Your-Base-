@@ -35,15 +35,19 @@ static const char LAPACK_NONUNITTRI[] = {'N'};
 static const char LAPACK_TRANS[] = {'T'};
 static const char LAPACK_NOTRANS[] = {'N'};
 static const int LAPACK_UNIT[] = {1};
+static const char LAPACK_LEFT[] = {'L'};
+static const char LAPACK_RIGHT[] = {'R'};
 
 // Float functions
 void F77_NAME(spotrf)( const char * uplo, const int * n, float * A, const int * lda, int * info );
+void F77_NAME(spotri)( const char * uplo, const int * n, float * A, const int * lda, int * info );
 void F77_NAME(strtri)( const char * uplo, const char * diag, const int * n, float * a, const int * lda, int * info);
 void F77_NAME(strmv)( const char * uplo, const char * trans, const char * diag, const int * n, const float * A, const int * lda, float * x, const int * incx);
+void F77_NAME(strmm)(const char * direct, const char * uplo, const char * trans, const char *diag, const int * m , const int * n, const float * alpha, const float * A, const int * lda, const float * B, const int * ldb);
 void F77_NAME(sposv)(const char * uplo, const int * N, const int * NRHS, float * A, const int * lda, float * B, const int * ldb, const int * info);
 void F77_NAME(sposvx)(const char * fact, const char * uplo, const int * N,
                       const int * NRHS, float * A, const int * lda, 
-                      const int * af, const int * ldaf, char * equed,
+                      const float * af, const int * ldaf, char * equed,
                       float * S, float * B, const int * ldb, float * x,
                       const int * ldx, float * rcond, float * ferr,
                       float * berr, float * work, int * iwork, int * info);
@@ -64,16 +68,21 @@ void F77_NAME(sgetrf)(const int * M, const int * N, float * A, const int * lda,
 
 void F77_NAME(sgetri)(const int * N, float * A, const int * lda, const int * ipiv,
                  float * work, const int * lwork, int * info);
+void F77_NAME(sgetrs)(const char * uplo, const int * N, const int * NRHS, const float * A, const int * lda, const int * piv, float * B, const int * ldb, int * info);
+void F77_NAME(ssyr)(const char * uplo, const int * N, const float * alpha, const float * x,
+                            const int * incx, float * A, const int * lda);
 
 
 // Double functions
 void F77_NAME(dpotrf)( const char * uplo, const int * n, double * A, const int * lda, int * info );
+void F77_NAME(dpotri)( const char * uplo, const int * n, double * A, const int * lda, int * info );
 void F77_NAME(dtrtri)( const char * uplo, const char * diag, const int * n, double * a, const int * lda, int * info);
 void F77_NAME(dtrmv)( const char * uplo, const char * trans, const char * diag, const int * n, const double * A, const int * lda, double * x, const int * incx);
+void F77_NAME(dtrmm)(const char * direct, const char * uplo, const char * trans, const char *diag, const int * m , const int * n, const double * alpha, const double * A, const int * lda, const double * B, const int * ldb);
 void F77_NAME(dposv)(const char * uplo, const int * N, const int * NRHS, double * A, const int * lda, double * B, const int * ldb, const int * info);
 void F77_NAME(dposvx)(const char * fact, const char * uplo, const int * N,
                       const int * NRHS, double * A, const int * lda, 
-                      const int * af, const int * ldaf, char * equed,
+                      const double * af, const int * ldaf, char * equed,
                       double * S, double * B, const int * ldb, double * x,
                       const int * ldx, double * rcond, double * ferr,
                       double * berr, double * work, int * iwork, int * info);
@@ -94,14 +103,19 @@ void F77_NAME(dgetrf)(const int * M, const int * N, double * A, const int * lda,
 
 void F77_NAME(dgetri)(const int * N, double * A, const int * lda, const int * ipiv,
                  double * work, const int * lwork, int * info);
+void F77_NAME(dgetrs)(const char * uplo, const int * N, const int * NRHS, const double * A, const int * lda, const int * piv, double * B, const int * ldb, int * info);
+void F77_NAME(dsyr)(const char * uplo, const int * N, const double * alpha, const double * x,
+                      const int * incx, double * A, const int * lda);
 
 
 
 // Generic definitions
 #ifdef USEFLOAT
     #define potrf   F77_NAME(spotrf)
+    #define potri   F77_NAME(spotri)
     #define trtri   F77_NAME(strtri)
     #define trmv    F77_NAME(strmv)
+    #define trmm    F77_NAME(strmm)
     #define posv    F77_NAME(sposv)
     #define posvx   F77_NAME(sposvx)
     #define gelss   F77_NAME(sgelss)
@@ -109,10 +123,14 @@ void F77_NAME(dgetri)(const int * N, double * A, const int * lda, const int * ip
     #define gemv    F77_NAME(sgemv)
     #define getrf   F77_NAME(sgetrf)
     #define getri   F77_NAME(sgetri)
+    #define getrs   F77_NAME(sgetrs)
+    #define syr     F77_NAME(dsyr)
 #else
     #define potrf   F77_NAME(dpotrf)
+    #define potri   F77_NAME(dpotri)
     #define trtri   F77_NAME(dtrtri)
     #define trmv    F77_NAME(dtrmv)
+    #define trmm    F77_NAME(dtrmm)
     #define posv    F77_NAME(dposv)
     #define posvx   F77_NAME(dposvx)
     #define gelss   F77_NAME(dgelss)
@@ -120,6 +138,8 @@ void F77_NAME(dgetri)(const int * N, double * A, const int * lda, const int * ip
     #define gemv    F77_NAME(dgemv)
     #define getrf   F77_NAME(dgetrf)
     #define getri   F77_NAME(dgetri)
+    #define getrs   F77_NAME(dgetrs)
+    #define syr     F77_NAME(dsyr)
 #endif
 
 #endif

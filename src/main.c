@@ -135,7 +135,7 @@ AYBOPT aybopt = {
     .dump_file_prefix = NULL,
     .spike_threshold = 0.,
     .remove_negative = false,
-    .min_lambda = 0.
+    .min_lambda = 0.0
 };
 
 
@@ -313,24 +313,23 @@ void dump_likelihood( FILE * fp, const AYB ayb){
     }
 
     // Calculate variance matrices and invert
-    MAT * V = calculate_covariance(ayb);
+    MAT V = calculate_covariance(ayb);
     XFILE * vout = xfopen("information.txt",XFILE_RAW,"w");
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-       MAT a = V[cy];
-       show_MAT(vout,V[cy],0,0);
-       V[cy] = invert(a);
-       free_MAT(a);
-    }
+    MAT a = V;
+    show_MAT(vout,a,0,0);
+    V = invertSym(a);
+    free_MAT(a);
     xfclose(vout);
     
     MAT pcl_int = NULL;
-    MAT Minv_t = transpose_inplace(invert(ayb->M));
-    MAT Pinv_t = transpose_inplace(invert(ayb->P));
+    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    struct structLU AtLU = LUdecomposition(ayb->At);
+
     real_t like[4] = {NAN,NAN,NAN,NAN};
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
        // Process intensities
        const real_t lambda = ayb->lambda->x[cl];
-       pcl_int = process_intensities(ayb->intensities.elt+cl*ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
+       pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
        // Coordinates
        uint16_t x=0,y=0;
        if(ayb->coordinates){
@@ -339,17 +338,14 @@ void dump_likelihood( FILE * fp, const AYB ayb){
        }
        fprintf(fp,"%" SCNu32 "\t%" SCNu32 "\t%" SCNu16 "\t%" SCNu16, aybopt.lane,aybopt.tile,x,y);
        for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-	  call_likelihoods(pcl_int->x+cy*NBASE,lambda,V[cy],like);
+	  //call_likelihoods(pcl_int->x+cy*NBASE,lambda,V[cy],like);
           fprintf(fp,"\t%3.2f %3.2f %3.2f %3.2f",like[0],like[1],like[2],like[3]);
        }
        fputc('\n',fp);
     }
-    free_MAT(Pinv_t);
-    free_MAT(Minv_t);
+    free_MAT(AtLU.mat);
+    free(AtLU.piv);
     free_MAT(pcl_int);
-    for(uint32_t cy=0 ; cy<ncycle ; cy++){
-       free_MAT(V[cy]);
-    }
     free(V);
 }
 
@@ -468,24 +464,14 @@ void analyse_tile( XFILE * fp){
         // Cross-talk
         CSTRING filename = NULL;
 	filename = concat_CSTRING(filename,aybopt.dump_file_prefix);
-	filename = concat_CSTRING(filename,".M.txt");
+	filename = concat_CSTRING(filename,".A.txt");
         XFILE * fp = xfopen(filename,XFILE_RAW,"w");
 	if(fp){
-            show_MAT(fp,ayb->M,0,0);
+            show_MAT(fp,ayb->At,0,0);
 	    xfclose(fp);
 	} else {
 	    fprintf(stderr,"Failed to open %s for output\n",filename);
 	}
-        // Phasing
-        xstrcpy(filename,aybopt.dump_file_prefix);
-	filename = concat_CSTRING(filename,".P.txt");
-	fp = xfopen(filename,XFILE_RAW,"w");
-	if(fp){
-	    show_MAT(fp,ayb->P,0,0);
-	    xfclose(fp);
-	} else {
-	    fprintf(stderr,"Failed to open %s for output\n",filename);
-        }
 	// Noise
         xstrcpy(filename,aybopt.dump_file_prefix);
 	filename = concat_CSTRING(filename,".N.txt");

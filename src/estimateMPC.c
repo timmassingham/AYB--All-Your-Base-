@@ -58,6 +58,115 @@ MAT calculateWe( const MAT lssi, MAT we){
     return we;
 }
 
+MAT calculateLhs( const real_t wbar,const MAT J, const MAT Sbar, MAT lhs){
+	if( NULL==J || NULL==Sbar){ return NULL; }
+	if(NULL==lhs){
+		lhs = new_MAT(J->nrow+1,J->nrow+1);
+		if(NULL==lhs){ return NULL;}
+	}
+	const int lda = J->nrow+1;
+	const int nelt = J->nrow;
+	for ( int i=0 ; i<nelt ; i++){
+		for ( int j=0 ; j<nelt ; j++){
+			lhs->x[i*lda+j] = J->x[i*nelt+j];
+		}
+		lhs->x[i*lda+nelt] = Sbar->x[i];
+		lhs->x[nelt*lda+i] = Sbar->x[i];
+	}
+	lhs->x[lda*lda-1] = wbar;
+	return lhs;
+}
+
+MAT calculateRhs( const MAT K, const MAT Ibar, MAT rhs){
+	if( NULL==K || NULL==Ibar ){ return NULL; }
+	if( NULL==rhs){
+		rhs = new_MAT(K->nrow+1,K->nrow);
+	}
+	const int nelt = K->nrow;
+	const int lda = K->nrow+1;
+	for ( int i=0 ; i<nelt ; i++){
+		for ( int j=0 ; j<nelt ; j++){
+			rhs->x[i*lda+j] = K->x[i*nelt+j];
+		}
+		rhs->x[i*lda+nelt] = Ibar->x[i];
+	}
+	return rhs;
+}
+
+// sum we_i vec(I_i) vec(I_i)^t
+/*MAT calculateNewJ(const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newJ){
+	if(NULL==intmat.elt || NULL==we){ return NULL;}
+	if(NULL==newJ){
+		newJ = new_MAT(ncycle*4,ncycle*4);
+		if(NULL==newJ){ return NULL; }
+	}
+	bzero(newJ->x,newJ->nrow*newJ->ncol*sizeof(real_t));
+
+	const int lda = ncycle * 4;
+	const int ncluster = we->nrow;
+	for ( int cl=0 ; cl<ncluster ; cl++){
+		for ( int i=0 ; i<lda ; i++){
+			const real_t colmult = we->x[cl] * intmat.elt[cl*lda+i];
+			for ( int j=0 ; j<lda ; j++){
+				newJ->x[i*lda+j] += intmat.elt[cl*lda+j] * colmult;
+			}
+		}
+	}
+
+	return newJ;
+}*/
+// sum we vec(S_i) vec(S_i)^t
+MAT calculateNewJ(const MAT lambda, const ARRAY(NUC) bases, const MAT we, const int ncycle, MAT newJ){
+   if(NULL==lambda || NULL==bases.elt || NULL==we){ return NULL;}
+   if(NULL==newJ){
+      newJ = new_MAT(ncycle*4,ncycle*4);
+      if(NULL==newJ){ return NULL; }
+   }
+   bzero(newJ->x,newJ->nrow*newJ->ncol*sizeof(real_t));
+
+   const int lda = ncycle * 4;
+   const int ncluster = we->nrow;
+   for ( int cl=0 ; cl<ncluster ; cl++){
+      const real_t eltmult = we->x[cl] * lambda->x[cl] * lambda->x[cl];
+      for ( int i=0 ; i<ncycle ; i++){
+         const int idx1 = i*NBASE+bases.elt[cl*ncycle+i];
+         for ( int j=0 ; j<ncycle ; j++){
+            const int idx2 = j*NBASE+bases.elt[cl*ncycle+j];
+            newJ->x[idx1*lda+idx2] += eltmult;
+         }
+      }
+   }
+
+   return newJ;
+}
+
+
+// sum we_i vec(S_i) vec(I_i)^t
+MAT calculateNewK(const MAT lambda, const ARRAY(NUC) bases,const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newK){
+        if(NULL==lambda || NULL==bases.elt || NULL==intmat.elt || NULL==we){ return NULL;}
+        if(NULL==newK){
+                newK = new_MAT(ncycle*4,ncycle*4);
+                if(NULL==newK){ return NULL; }
+        }
+        bzero(newK->x,newK->nrow*newK->ncol*sizeof(real_t));
+
+        const int lda = ncycle * 4;
+        const int ncluster = we->nrow;
+        for ( int cl=0 ; cl<ncluster ; cl++){
+		for ( int i=0 ; i<ncycle ; i++){
+			const int col = i*4 + bases.elt[cl*ncycle+i];
+			const real_t colmult = we->x[cl] * lambda->x[cl];
+			for ( int j=0 ; j<lda ; j++){
+				newK->x[col*lda+j] += intmat.elt[cl*lda+j] * colmult;
+			}
+		}
+	}
+	transpose_inplace(newK);
+
+	return newK;
+}
+
+
 
 MAT calculateIbar( const ARRAY(int16_t) intmat, const MAT we, MAT Ibar){
     validate(NULL!=intmat.elt,NULL);
@@ -396,13 +505,31 @@ int solver( MAT lhs, MAT rhs){
     validate(lhs->nrow==lhs->ncol,-2);
     validate(lhs->ncol==rhs->nrow,-3);
 
-    int info = 0;
+    int INFO = 0;
     for ( int i=0 ; i<lhs->nrow ; i++){
        lhs->x[i*lhs->nrow+i] += 1.;
     }
-    posv(LAPACK_UPPER, &lhs->ncol, &rhs->ncol, lhs->x, &lhs->nrow, rhs->x, &rhs->nrow, &info);
-    if(0!=info){ fprintf(stderr,"Error in solver, info = %d\n",info);}
-    return info;
+    //posv(LAPACK_UPPER, &lhs->ncol, &rhs->ncol, lhs->x, &lhs->nrow, rhs->x, &rhs->nrow, &info);
+    const int n = lhs->ncol;
+    const int nrhs = rhs->ncol;
+    const char FACT = 'E';
+    char EQUED = 'Y';
+    real_t S[n];
+    real_t rcond,ferr[nrhs],berr[nrhs];
+    real_t WORK[3*n];
+    int IWORK[n];
+    real_t X[n*nrhs],AF[n*n];
+    posvx(&FACT,LAPACK_UPPER,&n, &nrhs,lhs->x,&n,AF,&n,&EQUED,S,rhs->x,&n,X,&n,&rcond,ferr,berr,WORK,IWORK,&INFO);
+    instrument(fprintf(stderr,"posvx in %s returned %d\n",__func__,INFO));
+    if(0!=INFO){ fprintf(stderr,"Error in solver, info = %d\n",INFO);}
+
+    for ( int i=0 ; i<n*n ; i++){
+	    lhs->x[i] = AF[i];
+    }
+    for ( int i=0 ; i<n*nrhs ; i++){
+	    rhs->x[i] = X[i];
+    }
+    return INFO;
 }
 
 
@@ -422,6 +549,8 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
 
     gelss(&lhs->nrow,&lhs->ncol,&rhs->ncol,lhs->x,&lhs->nrow,
                       rhs->x,&rhs->nrow,tmp,&RCOND,&RANK,tmp+N,&IWORK,&INFO);
+    instrument(fprintf(stderr,"gelss in %s returned %d\n",__func__,INFO));
+    if(0!=INFO){ fprintf(stderr,"Error in solver, info = %d\n",INFO);}
     return INFO;
 }
 

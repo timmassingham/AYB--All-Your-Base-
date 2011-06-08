@@ -22,6 +22,7 @@
 #include "nuc.h"
 #include <strings.h>
 #include <math.h>
+#include "lapack.h"
 
 
 real_t calculateLSSi_sub( const real_t lambda, const NUC * bases, const MAT M, const MAT P, const MAT N, const real_t * I, MAT e);
@@ -65,6 +66,52 @@ MAT process_intensities(const int16_t * intensities, const MAT Minv_t, const MAT
     return p;
 }
 
+MAT processNew( const struct structLU AtLU, const MAT N, const int16_t * intensities, MAT p){
+	if(NULL==AtLU.mat || NULL==N || NULL==intensities){ return NULL;}
+	const int ncycle = N->ncol;
+	if(NULL==p){
+		p = new_MAT(4,ncycle);
+		if(NULL==p){ return NULL;}
+	}
+	const int nelt = 4*ncycle;
+
+	//real_t intminusN[nelt];
+	for ( int i=0 ; i<nelt ; i++){
+	   p->x[i] = intensities[i]-N->x[i];
+	}
+
+	const int inc = 1;
+	int info = 0;
+	getrs(LAPACK_TRANS,&nelt,&inc,AtLU.mat->x,&nelt,AtLU.piv,p->x,&nelt,&info);
+	//instrument(fprintf(stderr,"getrs returned %d in %s\n",info,__func__));
+	return p;
+}
+
+MAT expectedNew(const MAT A, const MAT N, const NUC * bases, MAT e){
+	if( NULL==A || NULL==N || NULL==bases){ return NULL; }
+	const int ncycle = N->ncol;
+	const int lda = 4*ncycle;
+	if(NULL==e){
+		e = new_MAT(4,ncycle);
+		if(NULL==e){ return NULL; }
+	}
+	bzero(e->x,lda*sizeof(real_t));
+
+	// A vec(S)
+	for ( int cy=0 ; cy<ncycle ; cy++){
+		const int idx = cy*4 + bases[cy];
+		for ( int i=0 ; i<lda ; i++){
+			e->x[i] += A->x[idx*lda+i];
+		}
+	}
+
+	// + N
+	for ( int i=0 ; i<lda ; i++){
+		e->x[i] += N->x[i];
+	}
+
+	return e;
+}
 
 real_t calculateLSS( const MAT lambda, const NUC * bases, const MAT M, const MAT P, const MAT N, const MAT I){
     validate(NULL!=lambda,NAN);

@@ -25,19 +25,35 @@
 #include "process_intensities.h"
 #include "estimateMPC.h"
 #include "statistics.h"
+#include "conjugate.h"
 
 
 #define AYB_NITER   20
 
 
-real_t initial_crosstalk[] = {
+/*real_t initial_crosstalk[] = {
     2.0114300, 1.7217841, 0.06436576, 0.1126401,
     0.6919319, 1.8022413, 0.06436576, 0.0804572,
     0.2735545, 0.2252802, 1.39995531, 0.9976693,
     0.2896459, 0.2413716, 0.11264008, 1.3194981
+};*/
+// Bpert s_2_0050
+/*real_t initial_crosstalk[] = {
+   1.60, 1.23, -0.02, -0.03,
+   0.27,  1.29, -0.03, -0.05,
+   -0.10, -0.14, 0.86, 0.56,
+   -0.10, -0.14, -0.02, 0.67
+};*/
+// HiSeq
+real_t initial_crosstalk[] = {
+     1.08, 1.13, 0.02, 0.01,
+     0.20, 0.93, 0.02, 0.02,
+     0.01, 0.02, 1.00, 0.53,
+     0.00, 0.01, 0.05, 1.32
 };
-MAT initial_M = NULL;
 
+MAT initial_M = NULL;
+MAT initial_At = NULL;
 
 /* Basic functions */
 AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
@@ -51,9 +67,10 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->M = new_MAT(NBASE,NBASE);
     ayb->P = new_MAT(ncycle,ncycle);
     ayb->N = new_MAT(NBASE,ncycle);
+    ayb->At = new_MAT(NBASE*ncycle,NBASE*ncycle);
     ayb->lambda = new_MAT(ncluster,1);
     ayb->we = new_MAT(ncluster,1);
-    ayb->cycle_var = new_MAT(ncycle,1);
+    ayb->cycle_var = new_MAT(4*ncycle,1);
 
     // Filtering
     ayb->filtered = false;
@@ -63,7 +80,7 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->readnum = 0;    
     
     if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M ||
-        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter){
+        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || NULL==ayb->At){
         goto cleanup;
     }
     
@@ -84,6 +101,7 @@ void free_AYB(AYB ayb){
     free_MAT(ayb->M);
     free_MAT(ayb->P);
     free_MAT(ayb->N);
+    free_MAT(ayb->At);
     free_MAT(ayb->we);
     free_MAT(ayb->cycle_var);
     free_MAT(ayb->lambda);
@@ -117,6 +135,9 @@ AYB copy_AYB(const AYB ayb){
 
     ayb_copy->N = copy_MAT(ayb->N);
     if(NULL!=ayb->N && NULL==ayb_copy->N){ goto cleanup;}
+    
+    ayb_copy->At = copy_MAT(ayb->At);
+    if(NULL!=ayb->At && NULL==ayb_copy->At){ goto cleanup;}
     
     ayb_copy->we = copy_MAT(ayb->we);
     if(NULL!=ayb->we && NULL==ayb_copy->we){ goto cleanup;}
@@ -185,6 +206,17 @@ AYB initialise_AYB(const CIFDATA cif){
     timestamp("Setting matrices\n",stderr);
     /* Initial cross-talk from default array */
     copyinto_MAT(ayb->M,initial_M);
+    initial_At = new_MAT(4*ayb->ncycle,4*ayb->ncycle);
+    const int lda = ayb->ncycle*4;
+    for ( int i=0 ; i<ayb->ncycle ; i++){
+	    for ( int j=0 ; j<4 ; j++){
+		    for ( int k=0 ; k<4 ; k++){
+	    		  initial_At->x[(i*4+j)*lda + i*4+k] = initial_M->x[j*4+k];
+		    }
+	    }
+    }
+    transpose_inplace(initial_At);
+    copyinto_MAT(ayb->At,initial_At);
     /* Initial noise is zero */
     set_MAT(ayb->N,0.);
     /* Initial phasing */
@@ -192,26 +224,27 @@ AYB initialise_AYB(const CIFDATA cif){
     ayb->P = identity_MAT(ayb->ncycle);
     /* Initial weights and cycles are all equal. Arbitrarily one */
     set_MAT(ayb->we,1.);
-    set_MAT(ayb->cycle_var,1);
+    set_MAT(ayb->cycle_var,1.0);
     
     /*  Call bases and lambda for each cluster */
     MAT pcl_int = NULL; // Shell for processed intensities
-    MAT Minv_t = transpose_inplace(invert(ayb->M));
-    MAT Pinv_t = transpose_inplace(invert(ayb->P));
+    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    struct structLU AtLU = LUdecomposition(ayb->At);
     timestamp("Processing clusters\n",stderr);
     for ( uint32_t cl=0 ; cl<ayb->ncluster ; cl++){
-        pcl_int = process_intensities(ayb->intensities.elt+cl*ayb->ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
+	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
         NUC * cl_bases = ayb->bases.elt + cl*ayb->ncycle;
         PHREDCHAR * cl_quals = ayb->quals.elt + cl*ayb->ncycle;
         for ( uint32_t cy=0 ; cy<ayb->ncycle ; cy++){
             cl_bases[cy] = call_base_simple(pcl_int->x+cy*NBASE);
             cl_quals[cy] = 33;
         }
-        ayb->lambda->x[cl] = estimate_lambdaOLS(pcl_int,cl_bases);
+        //ayb->lambda->x[cl] = estimate_lambdaOLS(pcl_int,cl_bases);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N,ayb->At, cl_bases,  ayb->ncycle);
     }
+    free_MAT(AtLU.mat);
+    free(AtLU.piv);
     free_MAT(pcl_int);
-    free_MAT(Pinv_t);
-    free_MAT(Minv_t);
     
     return ayb;
 }
@@ -223,24 +256,30 @@ real_t update_cluster_weights(AYB ayb){
     real_t sumLSS = 0.;
     
     MAT e = NULL;
+    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    struct structLU AtLU = LUdecomposition(ayb->At);
     /*  Calculate least squares error, using ayb->we as temporary storage */
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         ayb->we->x[cl] = 0.;
         int16_t * cycle_ints  = ayb->intensities.elt + cl*ncycle*NBASE;
         NUC *     cycle_bases = ayb->bases.elt + cl*ncycle;
-        e = expected_intensities(ayb->lambda->x[cl],cycle_bases,ayb->M,ayb->P,ayb->N,e);
+        e = processNew( AtLU, ayb->N, cycle_ints, e);
+        for ( int i=0 ; i<ncycle ; i++){
+                e->x[i*NBASE+cycle_bases[i]] -= ayb->lambda->x[cl];
+        }
         for( uint32_t idx=0 ; idx<NBASE*ncycle ; idx++){
-            real_t tmp = cycle_ints[idx] - e->x[idx];
-            ayb->we->x[cl] += tmp*tmp;
+            ayb->we->x[cl] += e->x[idx]*e->x[idx];
         }
         sumLSS += ayb->we->x[cl];
     }
+    free_MAT(AtLU.mat);
+    free(AtLU.piv);
     free_MAT(e);
-    
+
     /* Calculate weight for each cluster */
     real_t meanLSSi = mean(ayb->we->x,ncluster);
     real_t varLSSi = variance(ayb->we->x,ncluster);
-    for ( uint32_t cl=0 ; cl<ncluster ; cl++){
+    for ( uint_fast32_t cl=0 ; cl<ncluster ; cl++){
         const real_t d = ayb->we->x[cl]-meanLSSi;
         ayb->we->x[cl] = cauchy(d*d,varLSSi);
     }
@@ -255,6 +294,8 @@ real_t update_cluster_weights(AYB ayb){
  *  Recalculates weights
  *  Scales all lambda by factor
  */
+const real_t ridgeConst = 1000000.0;
+MAT gblOmega = NULL;
 real_t estimate_MPC( AYB ayb ){
     validate(NULL!=ayb,NAN);
     const uint32_t ncycle = ayb->ncycle;
@@ -265,100 +306,53 @@ real_t estimate_MPC( AYB ayb ){
     /*  Precalculate terms for iteration */
     //timestamp("Calculating matrices\n",stderr);
     //timestamp("J\t",stderr);
-    MAT J = calculateJ(ayb->lambda,ayb->we,ayb->bases,ncycle,NULL);
-    MAT Jt = transpose(J);
+    MAT J = calculateNewJ(ayb->lambda,ayb->bases,ayb->we,ncycle,NULL);
     //timestamp("K\t",stderr);
-    MAT K = calculateK(ayb->lambda,ayb->we,ayb->bases,ayb->intensities,ncycle,NULL);
+    MAT K = calculateNewK(ayb->lambda,ayb->bases,ayb->intensities,ayb->we,ncycle,NULL);
     //timestamp("Others\n",stderr);
-    MAT Kt = transpose(K);
     MAT Sbar = calculateSbar(ayb->lambda,ayb->we,ayb->bases,ncycle,NULL);
-    MAT SbarT = transpose(Sbar);
     MAT Ibar = calculateIbar(ayb->intensities,ayb->we,NULL);
-    MAT IbarT = transpose(Ibar);
     real_t Wbar = calculateWbar(ayb->we);
     real_t lambdaf = 1.;
     real_t * tmp = calloc(ncycle*ncycle*NBASE*NBASE,sizeof(real_t));
-    /* Convenience terms for M, P and N */
-    MAT matMt = transpose_inplace(ayb->M);
-    MAT matP = ayb->P;
-    MAT matN = ayb->N;
-    
-    //xfputs("Staring main loop",xstderr);
-    /*  Main iteration */
-    MAT mlhs=NULL,mrhs=NULL,plhs=NULL,prhs=NULL;
-    const uint32_t lda = NBASE + ncycle;
-    real_t det=0.;
-//xfprintf(xstderr,"Starting\tdelta = %e\n",calculateDeltaLSE( matMt, matP, matN, J, K, tmp));
-    for( uint32_t it=0 ; it<AYB_NITER ; it++){
-        /*
-         *  Solution for phasing and constant noise
-         */
-        plhs = calculatePlhs(Wbar,Sbar,matMt,J,tmp,plhs);
-        prhs = calculatePrhs(Ibar,matMt,Sbar,matN,K,tmp,prhs);
-        solverSVD(plhs,prhs,tmp);
-        for ( uint32_t i=0 ; i<ncycle ; i++){
-            for(uint32_t j=0 ; j<ncycle ; j++){
-                matP->x[i*ncycle+j] = (prhs->x[i*ncycle+j]>=0.)?prhs->x[i*ncycle+j]:0.;
-            }
-        }
-
-        // Scaling so det(P) = 1
-        det = normalise_MAT(matP,3e-8);
-        scale_MAT(J,det*det); scale_MAT(Jt,det*det);
-        scale_MAT(K,det);     scale_MAT(Kt,det);
-        scale_MAT(Sbar,det);  scale_MAT(SbarT,det);
-        lambdaf *= det;
-        
-        /*
-         *  Solution for cross-talk and constant noise
-         */
-        mlhs = calculateMlhs(ayb->cycle_var,Wbar,SbarT,matP,Jt,tmp,mlhs);
-        mrhs = calculateMrhs(ayb->cycle_var,IbarT,matP,Kt,tmp,mrhs);
-        solverSVD(mlhs,mrhs,tmp);
-
-        for(uint32_t i=0 ; i<NBASE ; i++){
-            for(uint32_t j=0 ; j<NBASE ; j++){
-                matMt->x[i*NBASE+j] = mrhs->x[i*lda+j];
-            }
-        }
-        for(uint32_t i=0 ; i<NBASE ; i++){
-            for(uint32_t j=0 ; j<ncycle ; j++){
-                matN->x[j*NBASE+i] = mrhs->x[i*lda+j+NBASE];
-            }
-        }
-        // Scaling so det(M) = 1
-        det = normalise_MAT(matMt,3e-8);
-        scale_MAT(J,det*det); scale_MAT(Jt,det*det);
-        scale_MAT(K,det);     scale_MAT(Kt,det);
-        scale_MAT(Sbar,det);  scale_MAT(SbarT,det);
-        lambdaf *= det;
-        //xfprintf(xstderr,"... done %u\tdelta = %e\n",i,calculateDeltaLSE( matMt, matP, matN, J, K, tmp));
+  
+    MAT lhs = calculateLhs(Wbar, J, Sbar, NULL); 
+    MAT rhs = calculateRhs( K, Ibar, NULL);
+    for ( int i=0 ; i<lhs->nrow ; i++){
+	    lhs->x[i*lhs->nrow+i] += ridgeConst;
     }
-    real_t delta = calculateDeltaLSE( matMt, matP, matN, J, K, tmp);
+    for ( int i=0 ; i<initial_At->ncol ; i++){
+        for ( int j=0 ; j<initial_At->nrow ; j++){
+	    rhs->x[i*rhs->nrow+j] += ridgeConst * initial_At->x[i*initial_At->nrow+j];
+	}
+    }
 
-    // Transpose Mt back to normal form 
-    matMt = transpose_inplace(matMt);
+    solver(lhs,rhs);
+    for( int i=0 ; i<rhs->ncol ; i++){
+        for( int j=0 ;j<rhs->ncol ; j++){
+	    ayb->At->x[i*ayb->At->nrow+j] = rhs->x[i*rhs->nrow+j];
+	}
+	ayb->N->x[i] = rhs->x[i*rhs->nrow+rhs->nrow-1];
+    }
+
+    //real_t delta = calculateDeltaLSE( matMt, matP, matN, J, K, tmp);
+
+    real_t det = normalise_MAT(ayb->At,3e-8);
+    lambdaf *= det;
     // Scale lambdas by factor 
     scale_MAT(ayb->lambda,lambdaf);
     
     // Clean-up memory
-    free_MAT(prhs);
-    free_MAT(plhs);
-    free_MAT(mrhs);
-    free_MAT(mlhs);
+    free_MAT(rhs);
+    free_MAT(lhs);
     xfree(tmp);
-    free_MAT(IbarT);
     free_MAT(Ibar);
-    free_MAT(SbarT);
     free_MAT(Sbar);
-    free_MAT(Kt);
     free_MAT(K);
-    free_MAT(Jt);
-    free_MAT(J);
     
     //xfprintf(xstderr,"Initial %e\tImprovement %e\t = %e\n",sumLSS,delta,sumLSS-delta);
     //xfprintf(xstderr,"Updated weights %e\n", update_cluster_weights(ayb));
-    return sumLSS-delta;
+    return sumLSS;//-delta;
 }
 
 real_t estimate_Bases(AYB ayb){
@@ -367,67 +361,47 @@ real_t estimate_Bases(AYB ayb){
     const uint32_t ncycle   = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
 //timestamp("Calculating covariance\n",stderr);
-    MAT * V = calculate_covariance(ayb);
+    MAT V = calculate_covariance(ayb);
     // Scale is variance of residuals. Get from V matrices.
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        ayb->cycle_var->x[cy] = 0.;
-        for ( uint32_t b=0 ; b<NBASE ; b++){
-            ayb->cycle_var->x[cy] += V[cy]->x[b*NBASE+b];
-        }
-        ayb->cycle_var->x[cy] = ayb->cycle_var->x[cy];
+    for ( uint32_t i=0 ; i<4*ncycle ; i++){
+        ayb->cycle_var->x[i] = V->x[i*ncycle*NBASE+i];
     }
 
-    // Invert variance matrices
-    for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-        MAT a = V[cy];
-        V[cy] = invert(a);
-        free_MAT(a);
-    }
+    gblOmega = fit_omega(V,gblOmega,false);
+    free_MAT(V); V = NULL;
+
+    instrument( XFILE * matfp = xfopen("information.txt",XFILE_RAW,"w");
+	        show_MAT(matfp,gblOmega,0,0);
+                xfclose(matfp);
+	  );
 
     MAT pcl_int = NULL; // Shell for processed intensities
-    MAT Minv_t = transpose_inplace(invert(ayb->M));
-    MAT Pinv_t = transpose_inplace(invert(ayb->P));
+    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    struct structLU AtLU = LUdecomposition(ayb->At);
 
 //timestamp("Base calling loop\n",stderr);
     real_t qual[ncycle];
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         NUC * bases = ayb->bases.elt + cl*ncycle;
         PHREDCHAR * phred = ayb->quals.elt + cl*ncycle;
-        pcl_int = process_intensities(ayb->intensities.elt+cl*ncycle*NBASE,Minv_t,Pinv_t,ayb->N,pcl_int);
+	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
-        ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
+        //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
-        for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-            struct basequal bq = call_base(pcl_int->x+cy*NBASE,ayb->lambda->x[cl],V[cy]);
-            bases[cy] = bq.base;
-            qual[cy] = bq.qual;
-        }
-	// Calibrate qualities
-	// First cycle
-	qual[0] = adjust_first_quality(qual[0],bases[0],bases[1]);
-	// Middle cycles
-	for ( uint32_t cy=1 ; cy<(ncycle-1) ; cy++){
-	   qual[cy] = adjust_quality(qual[cy],bases[cy-1],bases[cy],bases[cy+1]);
-	}
-	// Last cycle
-	qual[ncycle-1] = adjust_last_quality(qual[ncycle-1],bases[ncycle-2],bases[ncycle-1]);
-	// Create Phred
-	for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-	   phred[cy] = phredchar_from_quality(qual[cy]);
-	}
+	const int lda = 4*ncycle;
+	call_base(pcl_int,ayb->lambda->x[cl],gblOmega,bases);
+	for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
 
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
-        ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
-    }    
+        //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
+	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
+    }   
 //timestamp("Finished base calling\n",stderr);
     
     free_MAT(pcl_int);
-    free_MAT(Pinv_t);
-    free_MAT(Minv_t);
-    for(uint32_t cy=0 ; cy<ncycle ; cy++){
-        free_MAT(V[cy]);
-    }
-    free(V);
+    free_MAT(AtLU.mat);
+    free(AtLU.piv);
     
     return NAN;
 }

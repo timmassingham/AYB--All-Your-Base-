@@ -63,6 +63,7 @@ real_t qual_from_prob( const real_t prob);
 PHREDCHAR phredchar_from_quality( const real_t qual);
 PHREDCHAR phredchar_from_char( const char c);
 PHREDCHAR phredchar_from_prob( const real_t p);
+real_t qualadd(const real_t q1, const real_t q2);
 
 #endif
 

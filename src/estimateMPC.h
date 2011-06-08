@@ -39,6 +39,12 @@ int solver( MAT lhs, MAT rhs);
 int solverSVD(MAT lhs, MAT rhs, real_t * tmp);
 int solveNonneg(MAT lhs, MAT rhs, real_t *tmp);
 
+MAT calculateRhs( const MAT K, const MAT Sbar, MAT rhs);
+MAT calculateLhs( const real_t wbar,const MAT J, const MAT Ibar, MAT lhs);
+MAT calculateNewK(const MAT lambda, const ARRAY(NUC) bases,const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newK);
+//MAT calculateNewJ(const ARRAY(int16_t) intmat, const MAT we, const int ncycle, MAT newJ);
+MAT calculateNewJ(const MAT lambda, const ARRAY(NUC) bases, const MAT we, const int ncycle, MAT newJ);
+
 
 #endif /* ESTIMATE_MPC_H */
 

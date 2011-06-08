@@ -58,7 +58,8 @@ real_t estimate_lambdaWLS( const MAT p, const NUC * base, const real_t oldlambda
         }
         sse -= 2.0 * oldlambda * p->x[cycle*NBASE+cybase];
         sse += oldlambda*oldlambda;
-        real_t w = cauchy(sse,v[cycle]);
+        real_t w = cauchy(sse,v[cycle*4+cybase]);
+	//real_t w = 1.0/v[cycle*4+cybase];
         // Accumulate
         numerator += p->x[cycle*NBASE+cybase] * w;
         denominator += w;
@@ -112,6 +113,29 @@ real_t estimate_lambdaGWLS( const MAT p, const NUC * base, const real_t oldlambd
     real_t lambda = numerator / denominator;
     return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
 }
+
+real_t estimate_lambda_A ( const int16_t * intensity, const MAT N, const MAT At, const NUC * base, const int ncycle){
+	real_t As[NBASE*ncycle];
+	const int lda = NBASE*ncycle;
+	for ( int i=0 ; i<lda ; i++){
+		As[i] = 0.;
+		for ( int j=0 ; j<ncycle ; j++){
+			const int idx = j*NBASE+base[j];
+			As[i] += At->x[i*lda+idx];
+		}
+	}
+	real_t sAAs = 0.0;
+	real_t sAy = 0.0;
+	for ( int i=0 ; i<lda ; i++){
+		sAAs += As[i]*As[i];
+		sAy += (intensity[i]-N->x[i]) * As[i];
+	}
+
+	real_t lambda = sAy/sAAs;
+
+	return (lambda>aybopt.min_lambda)?lambda:aybopt.min_lambda;
+}
+       
 
 /*
  * Estimate brightness of a cluster using a Ordinary Least Squares approach.

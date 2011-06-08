@@ -112,7 +112,7 @@ void show_MAT ( XFILE * fp, const MAT mat, const uint32_t mrow, const uint32_t m
     xfprintf(fp,"%d\t%d\n",maxrow,maxcol);
     for( int row=0 ; row<maxrow ; row++){
         for ( int col=0 ; col<maxcol ; col++){
-            xfprintf(fp," %#8.2f",mat->x[col*nrow+row]);
+            xfprintf(fp," %#8.6e",mat->x[col*nrow+row]);
         }
         if(maxcol<ncol){ xfprintf(fp,"\t... (%u others)",ncol-maxcol); }
         xfputc('\n',fp);
@@ -277,6 +277,31 @@ MAT transpose( const MAT mat){
     return tmat;
 }
 
+/* Invert a symmetric matrix
+ */
+MAT invertSym(const MAT mat){
+   validate(NULL!=mat,NULL);
+   validate(mat->nrow==mat->ncol,NULL);
+
+   MAT A = copy_MAT(mat);
+   if(NULL==A){ return NULL;}
+   int N = mat->nrow;
+   int INFO;
+   // Cholesky
+   potrf(LAPACK_UPPER,&N,A->x,&N,&INFO);
+   instrument(fprintf(stderr,"potrf in %s returned %d\n",__func__,INFO));
+   // Invert
+   potri(LAPACK_UPPER,&N,A->x,&N,&INFO);
+   instrument(fprintf(stderr,"potri in %s returned %d\n",__func__,INFO));
+   // Make Symmetric
+   for ( int i=0 ; i<N ; i++){
+      for (int j=0 ; j<i ; j++){
+	 A->x[j*N+i] = A->x[i*N+j];
+      }
+   }
+   return A;
+}
+
 
 MAT invert(const MAT mat){
     validate(NULL!=mat,NULL);
@@ -299,8 +324,10 @@ MAT invert(const MAT mat){
     MAT matinv = copy_MAT(mat);
     // LU decomposition required for inversion
     getrf(&N,&N,matinv->x,&N,IPIV,&INFO);
+    instrument(fprintf(stderr,"getrf in %s returned %d\n",__func__,INFO));
     // Invert
     getri(&N,matinv->x,&N,IPIV,WORK,&LWORK,&INFO);
+    instrument(fprintf(stderr,"getri in %s returned %d\n",__func__,INFO));
     
     free(IPIV);
     free(WORK);
@@ -342,6 +369,7 @@ real_t normalise_MAT(MAT mat, const real_t delta_diag){
     MAT mcopy = copy_MAT(mat);
     int info = 0;
     getrf(&n,&n,mcopy->x,&n,piv,&info);
+    instrument(fprintf(stderr,"getrf in %s returned %d\n",__func__,info));
     
     real_t logdet = 0.;
     for ( uint32_t i=0 ; i<n ; i++){
@@ -353,3 +381,33 @@ real_t normalise_MAT(MAT mat, const real_t delta_diag){
     scale_MAT(mat,1./f);
     return f;
 }
+
+MAT cholesky( MAT mat){
+    validate(NULL!=mat,NULL);
+    validate(mat->nrow==mat->ncol,NULL);
+    int info=0;
+    int n = mat->nrow;
+    potrf(LAPACK_UPPER,&mat->nrow,mat->x,&mat->nrow,&info);
+    instrument(fprintf(stderr,"potrf in %s returned %d\n",__func__,info));
+    for( int i=0 ; i<n ; i++){
+        for ( int j=i+1 ;j<n ; j++){
+           mat->x[i*n+j] = 0;
+        }
+    } 
+    return mat;
+}
+
+struct structLU LUdecomposition( const MAT mat){
+   struct structLU structLUnill = {NULL,NULL};
+   validate(NULL!=mat,structLUnill);
+   validate(mat->nrow==mat->ncol,structLUnill);
+   const int n = mat->nrow;
+   int * piv = calloc(n,sizeof(int));;
+
+   MAT mcopy = copy_MAT(mat);
+   int info = 0;
+   getrf(&n,&n,mcopy->x,&n,piv,&info);
+
+   return (struct structLU) { mcopy, piv};
+}
+

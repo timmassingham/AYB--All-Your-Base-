@@ -37,6 +37,7 @@ typedef struct {
     ARRAY(NUC) bases;
     ARRAY(PHREDCHAR) quals;
     MAT M,P,N,lambda;
+    MAT At;
     MAT we, cycle_var;
     // Information about filtering
     bool filtered;
