@@ -294,7 +294,7 @@ real_t update_cluster_weights(AYB ayb){
  *  Recalculates weights
  *  Scales all lambda by factor
  */
-const real_t ridgeConst = 1000000.0;
+const real_t ridgeConst = 100000.0;
 MAT gblOmega = NULL;
 real_t estimate_MPC( AYB ayb ){
     validate(NULL!=ayb,NAN);
