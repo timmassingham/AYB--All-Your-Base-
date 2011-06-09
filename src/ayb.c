@@ -255,26 +255,12 @@ real_t update_cluster_weights(AYB ayb){
     const uint32_t ncycle   = ayb->ncycle;
     real_t sumLSS = 0.;
     
-    MAT e = NULL;
-    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
-    struct structLU AtLU = LUdecomposition(ayb->At);
-    /*  Calculate least squares error, using ayb->we as temporary storage */
+    /*  we contains squared error for each cluster,
+     *  calculated in estimate_Bases
+     */
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
-        ayb->we->x[cl] = 0.;
-        int16_t * cycle_ints  = ayb->intensities.elt + cl*ncycle*NBASE;
-        NUC *     cycle_bases = ayb->bases.elt + cl*ncycle;
-        e = processNew( AtLU, ayb->N, cycle_ints, e);
-        for ( int i=0 ; i<ncycle ; i++){
-                e->x[i*NBASE+cycle_bases[i]] -= ayb->lambda->x[cl];
-        }
-        for( uint32_t idx=0 ; idx<NBASE*ncycle ; idx++){
-            ayb->we->x[cl] += e->x[idx]*e->x[idx];
-        }
         sumLSS += ayb->we->x[cl];
     }
-    free_MAT(AtLU.mat);
-    free(AtLU.piv);
-    free_MAT(e);
 
     /* Calculate weight for each cluster */
     real_t meanLSSi = mean(ayb->we->x,ncluster);
@@ -299,9 +285,6 @@ MAT gblOmega = NULL;
 real_t estimate_MPC( AYB ayb ){
     validate(NULL!=ayb,NAN);
     const uint32_t ncycle = ayb->ncycle;
-    /*  Calculate new weights */
-    //timestamp("Updating weights\n",stderr);
-    real_t sumLSS = update_cluster_weights(ayb);
     
     /*  Precalculate terms for iteration */
     //timestamp("Calculating matrices\n",stderr);
@@ -352,7 +335,7 @@ real_t estimate_MPC( AYB ayb ){
     
     //xfprintf(xstderr,"Initial %e\tImprovement %e\t = %e\n",sumLSS,delta,sumLSS-delta);
     //xfprintf(xstderr,"Updated weights %e\n", update_cluster_weights(ayb));
-    return sumLSS;//-delta;
+    return NAN;
 }
 
 real_t estimate_Bases(AYB ayb){
@@ -396,7 +379,19 @@ real_t estimate_Bases(AYB ayb){
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
+
+	// Calculate squared error
+	ayb->we->x[cl] = 0.0;
+	for ( int cy=0 ; cy<ncycle ; cy++){
+		pcl_int->x[cy*4+bases[cy]] -= ayb->lambda->x[cl];
+	}
+	for ( int i=0 ; i<(4*ncycle) ; i++){
+		ayb->we->x[cl] += pcl_int->x[i] * pcl_int->x[i];
+	}
     }   
+    /*  Calculate new weights */
+    //timestamp("Updating weights\n",stderr);
+    update_cluster_weights(ayb);
 //timestamp("Finished base calling\n",stderr);
     
     free_MAT(pcl_int);
