@@ -19,6 +19,7 @@
  */
 
 #include <math.h>
+#include <omp.h>
 #include "ayb.h"
 #include "call_bases.h"
 #include "estimate_lambda.h"
@@ -227,16 +228,25 @@ AYB initialise_AYB(const CIFDATA cif){
     set_MAT(ayb->cycle_var,1.0);
     
     /*  Call bases and lambda for each cluster */
-    MAT pcl_int = NULL; // Shell for processed intensities
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
     timestamp("Processing clusters\n",stderr);
-    for ( uint32_t cl=0 ; cl<ayb->ncluster ; cl++){
-	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
-        NUC * cl_bases = ayb->bases.elt + cl*ayb->ncycle;
-        PHREDCHAR * cl_quals = ayb->quals.elt + cl*ayb->ncycle;
-        for ( uint32_t cy=0 ; cy<ayb->ncycle ; cy++){
-            cl_bases[cy] = call_base_simple(pcl_int->x+cy*NBASE);
+    int_fast32_t cl,cy;
+    NUC * cl_bases = NULL;
+    PHREDCHAR * cl_quals = NULL;
+    int th_id;
+    int ncpu = omp_get_max_threads();
+    MAT pcl_int[ncpu];
+    for ( int i=0 ; i<ncpu ; i++){ pcl_int[i] = NULL; }
+    #pragma omp parallel for \
+      default(shared) private(cl,th_id,cl_bases,cl_quals,cy)
+    for ( cl=0 ; cl<ayb->ncluster ; cl++){
+	th_id = omp_get_thread_num();
+	pcl_int[th_id] =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int[th_id]);
+        cl_bases = ayb->bases.elt + cl*ayb->ncycle;
+        cl_quals = ayb->quals.elt + cl*ayb->ncycle;
+        for ( cy=0 ; cy<ayb->ncycle ; cy++){
+            cl_bases[cy] = call_base_simple(pcl_int[th_id]->x+cy*NBASE);
             cl_quals[cy] = 33;
         }
         //ayb->lambda->x[cl] = estimate_lambdaOLS(pcl_int,cl_bases);
@@ -244,7 +254,9 @@ AYB initialise_AYB(const CIFDATA cif){
     }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
-    free_MAT(pcl_int);
+    for ( int i=0 ; i<ncpu ; i++){
+    	free_MAT(pcl_int[i]);
+    }
     
     return ayb;
 }
@@ -255,26 +267,38 @@ real_t update_cluster_weights(AYB ayb){
     const uint32_t ncycle   = ayb->ncycle;
     real_t sumLSS = 0.;
     
-    MAT e = NULL;
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
+    int_fast32_t cl,i,idx;
+    NUC * cycle_bases;
+    int16_t * cycle_ints;
+    const int ncpu = omp_get_max_threads();
+    int th_id;
+    MAT e[ncpu];
+    for ( int i=0 ; i<ncpu ; i++){ e[i] = NULL; }
     /*  Calculate least squares error, using ayb->we as temporary storage */
-    for ( uint32_t cl=0 ; cl<ncluster ; cl++){
+    #pragma omp parallel for \
+      default(shared) private(th_id,cl,cycle_ints,cycle_bases,i,idx) \
+      reduction(+:sumLSS)
+    for ( cl=0 ; cl<ncluster ; cl++){
+	th_id = omp_get_thread_num();
         ayb->we->x[cl] = 0.;
-        int16_t * cycle_ints  = ayb->intensities.elt + cl*ncycle*NBASE;
-        NUC *     cycle_bases = ayb->bases.elt + cl*ncycle;
-        e = processNew( AtLU, ayb->N, cycle_ints, e);
-        for ( int i=0 ; i<ncycle ; i++){
-                e->x[i*NBASE+cycle_bases[i]] -= ayb->lambda->x[cl];
+        cycle_ints  = ayb->intensities.elt + cl*ncycle*NBASE;
+        cycle_bases = ayb->bases.elt + cl*ncycle;
+        e[th_id] = processNew( AtLU, ayb->N, cycle_ints, e[th_id]);
+        for ( i=0 ; i<ncycle ; i++){
+                e[th_id]->x[i*NBASE+cycle_bases[i]] -= ayb->lambda->x[cl];
         }
-        for( uint32_t idx=0 ; idx<NBASE*ncycle ; idx++){
-            ayb->we->x[cl] += e->x[idx]*e->x[idx];
+        for( idx=0 ; idx<NBASE*ncycle ; idx++){
+            ayb->we->x[cl] += e[th_id]->x[idx]*e[th_id]->x[idx];
         }
         sumLSS += ayb->we->x[cl];
     }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
-    free_MAT(e);
+    for ( int i=0 ; i<ncpu ; i++){
+    	free_MAT(e[i]);
+    }
 
     /* Calculate weight for each cluster */
     real_t meanLSSi = mean(ayb->we->x,ncluster);
@@ -349,6 +373,7 @@ real_t estimate_MPC( AYB ayb ){
     free_MAT(Ibar);
     free_MAT(Sbar);
     free_MAT(K);
+    free_MAT(J);
     
     //xfprintf(xstderr,"Initial %e\tImprovement %e\t = %e\n",sumLSS,delta,sumLSS-delta);
     //xfprintf(xstderr,"Updated weights %e\n", update_cluster_weights(ayb));
@@ -375,31 +400,38 @@ real_t estimate_Bases(AYB ayb){
                 xfclose(matfp);
 	  );
 
-    MAT pcl_int = NULL; // Shell for processed intensities
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
 
 //timestamp("Base calling loop\n",stderr);
-    real_t qual[ncycle];
-    for ( uint32_t cl=0 ; cl<ncluster ; cl++){
-        NUC * bases = ayb->bases.elt + cl*ncycle;
-        PHREDCHAR * phred = ayb->quals.elt + cl*ncycle;
-	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
-        //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
-        //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
+    //real_t qual[ncycle];
+    int th_id;
+    const int ncpu = omp_get_max_threads();
+    int_fast32_t cl=0;
+    NUC * bases = NULL;
+    PHREDCHAR * phred = NULL;
+    MAT pcl_int[ncpu];
+    for ( int i=0 ; i<ncpu ; i++){ pcl_int[i] = NULL; }
+    FILE * fp = fopen("processed.txt","w");
+    #pragma omp parallel for \
+      default(shared) private(cl,bases,phred,th_id)
+    for ( cl=0 ; cl<ncluster ; cl++){
+	th_id = omp_get_thread_num();
+        bases = ayb->bases.elt + cl*ncycle;
+        phred = ayb->quals.elt + cl*ncycle;
+	pcl_int[th_id] =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int[th_id]);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
-	const int lda = 4*ncycle;
-	call_base(pcl_int,ayb->lambda->x[cl],gblOmega,bases);
-	for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
+	call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases);
+	//for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
 
-        //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
-        //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
+	fprintf(fp,"%e %e %e %e\n",pcl_int[th_id]->x[0],pcl_int[th_id]->x[1],pcl_int[th_id]->x[2],pcl_int[th_id]->x[3]);
     }   
+    fclose(fp);
 //timestamp("Finished base calling\n",stderr);
     
-    free_MAT(pcl_int);
+    for ( int i=0 ; i<ncpu ; i++){ free_MAT(pcl_int[i]); }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
     

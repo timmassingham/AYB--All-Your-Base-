@@ -18,6 +18,7 @@
  *  along with AYB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -40,7 +41,7 @@ void fprint_usage( FILE * fp){
 "\n"
 "Usage:\n"
 "\t" PROGNAME " [-c coordinate_file] [-d prefix] [-f format] [-i iterations] [-l lane] [-L minlam]\n"
-"\t    [-m mu] [-n machine_name] [-o outfile] [-r run_number] [-s threshold] [-t tile] -z\n"
+"\t    [-m mu] [-n machine_name] [-o outfile] [-p ncpu] [-r run_number] [-s threshold] [-t tile] -z\n"
 "\t    data.cif\n"
 "\t" PROGNAME " --help\n"
 "\t" PROGNAME " --licence\n"
@@ -85,6 +86,8 @@ void fprint_help( FILE * fp){
 "\tName of machine for qseq output\n"
 "-o, --outfile [default: stdout]\n"
 "\tFile to write output to.\n"
+"-p, --parallel nthread [default: 1]\n"
+"\tUse multiple threads to speed up run time.\n"
 "-r, --run run_number [default: 0]\n"
 "\tRun number for qseq output\n"
 "-s , --spike threshold [default: don't remove]\n"
@@ -113,6 +116,7 @@ static struct option longopts[] = {
     { "mu",         required_argument, NULL, 'm'},
     { "name",       required_argument, NULL, 'n'},
     { "outfile",    required_argument, NULL, 'o'},
+    { "parallel",   required_argument, NULL, 'p'},
     { "run",        required_argument, NULL, 'r'},
     { "spike",      required_argument, NULL, 's'},
     { "tile",       required_argument, NULL, 't'},
@@ -135,7 +139,8 @@ AYBOPT aybopt = {
     .dump_file_prefix = NULL,
     .spike_threshold = 0.,
     .remove_negative = false,
-    .min_lambda = 0.0
+    .min_lambda = 0.0,
+    .ncpu = 1
 };
 
 
@@ -159,7 +164,7 @@ void parse_arguments( const int argc, char * const argv[] ){
         aybopt.output_fp = stdout;
         
         int ch;
-        while ((ch = getopt_long(argc, argv, "c:d:f:i:l:L:m:n:o:r:s:t:zh", longopts, NULL)) != -1){
+        while ((ch = getopt_long(argc, argv, "c:d:f:i:l:L:m:n:o:p:r:s:t:zh", longopts, NULL)) != -1){
         switch(ch){
             case 'c':  aybopt.coordinate_file = copy_CSTRING(optarg);
                        break;
@@ -202,6 +207,11 @@ void parse_arguments( const int argc, char * const argv[] ){
                            fprintf(stderr,"Failed to open %s for output, reverting to stdout\n",optarg);
                            aybopt.output_fp = stdout;
                        }
+		       break;
+	    case 'p':  aybopt.ncpu = parse_uint(optarg);
+		       omp_set_num_threads(aybopt.ncpu);
+		       fprintf(stderr,"Going to use %d threads (set %d).\n",omp_get_max_threads(),aybopt.ncpu);
+		       break;
             case 'r':  aybopt.run_number = parse_uint(optarg);
                        break;
 	    case 's':  aybopt.spike_threshold = parse_real(optarg);

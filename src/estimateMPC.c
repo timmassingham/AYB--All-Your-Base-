@@ -18,6 +18,7 @@
  *  along with AYB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <omp.h>
 #include <math.h>
 #include <strings.h>
 #include "ayb.h"
@@ -126,16 +127,37 @@ MAT calculateNewJ(const MAT lambda, const ARRAY(NUC) bases, const MAT we, const 
 
    const int lda = ncycle * 4;
    const int ncluster = we->nrow;
-   for ( int cl=0 ; cl<ncluster ; cl++){
-      const real_t eltmult = we->x[cl] * lambda->x[cl] * lambda->x[cl];
-      for ( int i=0 ; i<ncycle ; i++){
-         const int idx1 = i*NBASE+bases.elt[cl*ncycle+i];
-         for ( int j=0 ; j<ncycle ; j++){
-            const int idx2 = j*NBASE+bases.elt[cl*ncycle+j];
-            newJ->x[idx1*lda+idx2] += eltmult;
+   int_fast32_t cl;
+   int i,idx1,j,idx2;
+   real_t eltmult;
+   const int ncpu = omp_get_max_threads();
+   int th_id;
+   MAT J[ncpu];
+   for ( int i=0 ; i<ncpu ; i++){ J[i] = new_MAT(lda,lda); }
+   #pragma omp parallel for \
+     default(shared) private(th_id,cl,eltmult,i,j,idx1,idx2)
+   for ( cl=0 ; cl<ncluster ; cl++){
+      th_id = omp_get_thread_num();
+      eltmult = we->x[cl] * lambda->x[cl] * lambda->x[cl];
+      for ( i=0 ; i<ncycle ; i++){
+         idx1 = i*NBASE+bases.elt[cl*ncycle+i];
+         for ( j=0 ; j<ncycle ; j++){
+            idx2 = j*NBASE+bases.elt[cl*ncycle+j];
+            J[th_id]->x[idx1*lda+idx2] += eltmult;
          }
       }
    }
+
+   // Accumulate 
+   for ( int i=0 ; i<ncpu ; i++){
+	   if(NULL!=J[i]){
+		   for ( int j=0 ; j<lda*lda ; j++){
+			   newJ->x[j] += J[i]->x[j];
+		   }
+		   free_MAT(J[i]);
+	   }
+   }
+   
 
    return newJ;
 }
@@ -152,15 +174,34 @@ MAT calculateNewK(const MAT lambda, const ARRAY(NUC) bases,const ARRAY(int16_t) 
 
         const int lda = ncycle * 4;
         const int ncluster = we->nrow;
-        for ( int cl=0 ; cl<ncluster ; cl++){
-		for ( int i=0 ; i<ncycle ; i++){
-			const int col = i*4 + bases.elt[cl*ncycle+i];
-			const real_t colmult = we->x[cl] * lambda->x[cl];
-			for ( int j=0 ; j<lda ; j++){
-				newK->x[col*lda+j] += intmat.elt[cl*lda+j] * colmult;
+	int cl,i,j,col;
+	real_t colmult;
+	const int ncpu = omp_get_max_threads();
+	int th_id;
+	MAT K[ncpu];
+	for ( int i=0 ; i<ncpu ; i++){ K[i] = new_MAT(lda,lda); }
+        #pragma omp parallel for \
+	  default(shared) private(th_id,cl,colmult,i,j,col)
+        for ( cl=0 ; cl<ncluster ; cl++){
+		th_id = omp_get_thread_num();
+		for ( i=0 ; i<ncycle ; i++){
+			col = i*4 + bases.elt[cl*ncycle+i];
+			colmult = we->x[cl] * lambda->x[cl];
+			for ( j=0 ; j<lda ; j++){
+				K[th_id]->x[col*lda+j] += intmat.elt[cl*lda+j] * colmult;
 			}
 		}
 	}
+	// Accumulate 
+   	for ( int i=0 ; i<ncpu ; i++){
+           if(NULL!=K[i]){
+                   for ( int j=0 ; j<lda*lda ; j++){
+                           newK->x[j] += K[i]->x[j];
+                   }
+                   free_MAT(K[i]);
+           }
+   	}
+
 	transpose_inplace(newK);
 
 	return newK;

@@ -41,6 +41,7 @@ typedef struct {
     real_t spike_threshold;
     bool remove_negative;
     real_t min_lambda;
+    int ncpu;
 } AYBOPT;
 
 

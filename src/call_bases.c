@@ -18,6 +18,7 @@
  *  along with AYB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <omp.h>
 #include <assert.h>
 #include <math.h>
 #include <strings.h>
@@ -334,11 +335,6 @@ MAT accumulate_covariance( const real_t we, const MAT p, const real_t lambda, co
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         p->x[cy*NBASE+base[cy]] -= lambda;
     }
-    /*for ( uint32_t i=0 ; i<lda ; i++){
-        for ( uint32_t j=0 ; j<lda ; j++){
-            V->x[i*lda+j] += we * p->x[i] * p->x[j];
-        }
-    }*/
     const real_t alpha = 1.0;
     syr(LAPACK_LOWER,&lda,&alpha,p->x,LAPACK_UNIT,V->x,&lda);
 
@@ -357,39 +353,59 @@ MAT calculate_covariance( const AYB ayb){
     const uint32_t ncluster = ayb->ncluster;
     const uint32_t ncycle = ayb->ncycle;
     
-    MAT V = NULL;
-    MAT p = NULL;
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
         
     real_t wesum = 0.;
-    for ( uint32_t cl=0 ; cl<ncluster; cl++){
-        const int16_t * cl_intensities = ayb->intensities.elt+cl*ncycle*NBASE;
-        const NUC * cl_bases = ayb->bases.elt + cl*ncycle; 
-	p =  processNew( AtLU, ayb->N, cl_intensities,p);
-        validate(NULL!=p,NULL);
-        V = accumulate_covariance(ayb->we->x[cl],p,ayb->lambda->x[cl],cl_bases,V);
-        validate(NULL!=V,NULL);
+    int16_t * cl_intensities;
+    NUC * cl_bases;
+    const int ncpu = omp_get_max_threads();
+    int th_id;
+    int_fast32_t cl=0;
+    MAT p[ncpu],V[ncpu];
+    for( int i=0 ; i<ncpu ; i++){ p[i] = NULL; V[i] = NULL; }
+    #pragma omp parallel for \
+      default(shared) private(cl,cl_bases,cl_intensities,th_id) \
+      reduction(+:wesum)
+    for ( cl=0 ; cl<ncluster; cl++){
+	th_id = omp_get_thread_num();
+        cl_intensities = ayb->intensities.elt+cl*ncycle*NBASE;
+        cl_bases = ayb->bases.elt + cl*ncycle; 
+	p[th_id] =  processNew( AtLU, ayb->N, cl_intensities,p[th_id]);
+        V[th_id] = accumulate_covariance(ayb->we->x[cl],p[th_id],ayb->lambda->x[cl],cl_bases,V[th_id]);
         wesum += ayb->we->x[cl];
     }
-    free_MAT(p);
+   
+    // Accumulate per-thread results
+    int lda = V[0]->nrow;
+    MAT Vsum = new_MAT(lda,lda);
+    for ( int i=0 ; i<ncpu ; i++){
+	    if(NULL!=V[i]){
+		    for ( int j=0 ; j<lda*lda ; j++){
+			    Vsum->x[j] += V[i]->x[j];
+		    }
+	    }
+    }
+    for ( int i=0 ; i<ncpu ; i++){
+    	free_MAT(p[i]);
+    	free_MAT(V[i]);
+    }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
 
     // V is lower triangular
-    const int lda = NBASE*ncycle;
     for ( int i=0 ; i<lda ; i++){
        for ( int j=0 ; j<i ; j++){
-	  V->x[i*lda+j] = V->x[j*lda+i];
+	  Vsum->x[i*lda+j] = Vsum->x[j*lda+i];
        }
     }
 
     // Scale sum of squares to make covariance
     for ( uint32_t i=0 ; i<lda*lda ; i++){
-            V->x[i] /= wesum;
+            Vsum->x[i] /= wesum;
         }
 
-    return V;
+    return Vsum;
 }
 
 
