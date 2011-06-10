@@ -228,7 +228,7 @@ AYB initialise_AYB(const CIFDATA cif){
     
     /*  Call bases and lambda for each cluster */
     MAT pcl_int = NULL; // Shell for processed intensities
-    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    //MAT invA = transpose_inplace(invert(ayb->At)); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
     timestamp("Processing clusters\n",stderr);
     for ( uint32_t cl=0 ; cl<ayb->ncluster ; cl++){
@@ -310,7 +310,11 @@ real_t estimate_MPC( AYB ayb ){
 	}
     }
 
-    solver(lhs,rhs);
+    XFILE * lhsfp = xfopen("lhs.txt",XFILE_RAW,"w");
+    show_MAT(lhsfp,lhs,0,0);
+    xfclose(lhsfp);
+
+    solverSVD(lhs,rhs);
     for( int i=0 ; i<rhs->ncol ; i++){
         for( int j=0 ;j<rhs->ncol ; j++){
 	    ayb->At->x[i*ayb->At->nrow+j] = rhs->x[i*rhs->nrow+j];
@@ -343,15 +347,6 @@ real_t estimate_Bases(AYB ayb){
     //initialise_calibration();
     const uint32_t ncycle   = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
-//timestamp("Calculating covariance\n",stderr);
-    MAT V = calculate_covariance(ayb);
-    // Scale is variance of residuals. Get from V matrices.
-    for ( uint32_t i=0 ; i<4*ncycle ; i++){
-        ayb->cycle_var->x[i] = V->x[i*ncycle*NBASE+i];
-    }
-
-    gblOmega = fit_omega(V,gblOmega,false);
-    free_MAT(V); V = NULL;
 
     instrument( XFILE * matfp = xfopen("information.txt",XFILE_RAW,"w");
 	        show_MAT(matfp,gblOmega,0,0);
@@ -359,20 +354,36 @@ real_t estimate_Bases(AYB ayb){
 	  );
 
     MAT pcl_int = NULL; // Shell for processed intensities
-    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
+    MAT invA = transpose_inplace(invert(ayb->At)); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
+    SparseMAT spAinv = make_SparseMAT(invA,0.0001);
+    free_MAT(invA); invA=NULL;
+
+    if(NULL==gblOmega){
+	MAT V = calculate_covariance(ayb);
+	gblOmega = fit_omega(V,gblOmega,false);
+	free_MAT(V);
+    }
+
+
 
 //timestamp("Base calling loop\n",stderr);
     real_t qual[ncycle];
+    real_t wesum = 0.0;
+    MAT V = NULL;
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
         NUC * bases = ayb->bases.elt + cl*ncycle;
         PHREDCHAR * phred = ayb->quals.elt + cl*ncycle;
-	pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+	/*pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+	xfputs("Original:\n",xstderr);
+	show_MAT(xstderr,pcl_int,4,8);*/
+	pcl_int =  processSparseNew( spAinv, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
+	/*xfputs("Sparse:\n",xstderr);
+	show_MAT(xstderr,pcl_int,4,8);*/
         //ayb->lambda->x[cl] = estimate_lambdaGWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x,V);
         //ayb->lambda->x[cl] = estimate_lambdaWLS(pcl_int,bases,ayb->lambda->x[cl],ayb->cycle_var->x);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
-	const int lda = 4*ncycle;
 	call_base(pcl_int,ayb->lambda->x[cl],gblOmega,bases);
 	for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
 
@@ -381,6 +392,8 @@ real_t estimate_Bases(AYB ayb){
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 
 	// Calculate squared error
+        V = accumulate_covariance( ayb->we->x[cl], pcl_int, ayb->lambda->x[cl], bases, V);
+	wesum += ayb->we->x[cl];
 	ayb->we->x[cl] = 0.0;
 	for ( int cy=0 ; cy<ncycle ; cy++){
 		pcl_int->x[cy*4+bases[cy]] -= ayb->lambda->x[cl];
@@ -388,7 +401,29 @@ real_t estimate_Bases(AYB ayb){
 	for ( int i=0 ; i<(4*ncycle) ; i++){
 		ayb->we->x[cl] += pcl_int->x[i] * pcl_int->x[i];
 	}
-    }   
+    }
+    // Make accumulated updates into covariance matrix
+    // V is lower triangular, make symmeric
+    const int ldv = NBASE*ncycle;
+    for ( int i=0 ; i<ldv ; i++){
+       for ( int j=0 ; j<i ; j++){
+          V->x[i*ldv+j] = V->x[j*ldv+i];
+       }
+    }
+    // Scale sum of squares to make covariance
+    for ( uint32_t i=0 ; i<ldv*ldv ; i++){
+            V->x[i] /= wesum;
+    }
+    // Scale is variance of residuals. Get from V matrices.
+    for ( uint32_t i=0 ; i<ldv ; i++){
+        ayb->cycle_var->x[i] = V->x[i*ldv+i];
+    }
+
+    // Fit information matrix
+    gblOmega = fit_omega(V,gblOmega,false);
+    free_MAT(V);
+
+
     /*  Calculate new weights */
     //timestamp("Updating weights\n",stderr);
     update_cluster_weights(ayb);

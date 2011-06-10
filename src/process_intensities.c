@@ -19,6 +19,7 @@
  */
 
 #include "matrix.h"
+#include "sparse_mat.h"
 #include "nuc.h"
 #include <strings.h>
 #include <math.h>
@@ -86,6 +87,25 @@ MAT processNew( const struct structLU AtLU, const MAT N, const int16_t * intensi
 	//instrument(fprintf(stderr,"getrs returned %d in %s\n",info,__func__));
 	return p;
 }
+
+MAT processSparseNew( const SparseMAT spAinv, const MAT N, const int16_t * intensities, MAT p){
+	if(NULL==spAinv || NULL==N || NULL==intensities){ return NULL;}
+	const int ncycle = N->ncol;
+	if(NULL==p){
+		p = new_MAT(4,ncycle);
+		if(NULL==p){ return NULL;}
+	}
+
+	const int nelt = 4*ncycle;
+	real_t intminusN[nelt];
+	for ( int i=0 ; i<nelt ; i++){
+		intminusN[i] = intensities[i]-N->x[i];
+	}
+
+	sparseMv(spAinv,intminusN,p->x);
+	return p;
+}
+
 
 MAT expectedNew(const MAT A, const MAT N, const NUC * bases, MAT e){
 	if( NULL==A || NULL==N || NULL==bases){ return NULL; }

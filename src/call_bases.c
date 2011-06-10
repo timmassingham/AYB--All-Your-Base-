@@ -334,11 +334,7 @@ MAT accumulate_covariance( const real_t we, const MAT p, const real_t lambda, co
     for ( uint32_t cy=0 ; cy<ncycle ; cy++){
         p->x[cy*NBASE+base[cy]] -= lambda;
     }
-    /*for ( uint32_t i=0 ; i<lda ; i++){
-        for ( uint32_t j=0 ; j<lda ; j++){
-            V->x[i*lda+j] += we * p->x[i] * p->x[j];
-        }
-    }*/
+
     const real_t alpha = 1.0;
     syr(LAPACK_LOWER,&lda,&alpha,p->x,LAPACK_UNIT,V->x,&lda);
 

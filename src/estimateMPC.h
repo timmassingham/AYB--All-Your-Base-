@@ -36,7 +36,7 @@ MAT calculatePlhs( const real_t wbar, const MAT Sbar, const MAT Mt, const MAT J,
 MAT calculatePrhs( const MAT Ibar, const MAT Mt, const MAT Sbar, const MAT N, const MAT K, real_t * tmp, MAT rhs);
 real_t calculateDeltaLSE(const MAT Mt, const MAT P, const MAT N, const MAT J, const MAT K, real_t * tmp);
 int solver( MAT lhs, MAT rhs);
-int solverSVD(MAT lhs, MAT rhs, real_t * tmp);
+int solverSVD(MAT lhs, MAT rhs);
 int solveNonneg(MAT lhs, MAT rhs, real_t *tmp);
 
 MAT calculateRhs( const MAT K, const MAT Sbar, MAT rhs);

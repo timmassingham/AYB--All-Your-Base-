@@ -33,6 +33,7 @@ real_t adjust_last_quality(const real_t qual, const NUC prior, const NUC base);
 void call_likelihoods(const real_t * restrict p,const real_t lambda,const MAT omega,real_t * like);
 
 MAT calculate_covariance(const AYB ayb);
+MAT accumulate_covariance( const real_t we, const MAT p, const real_t lambda, const NUC * base, MAT V);
 
 #endif /* _CALL_BASES_H */
 
