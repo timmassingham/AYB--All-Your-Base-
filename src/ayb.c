@@ -412,7 +412,6 @@ real_t estimate_Bases(AYB ayb){
     PHREDCHAR * phred = NULL;
     MAT pcl_int[ncpu];
     for ( int i=0 ; i<ncpu ; i++){ pcl_int[i] = NULL; }
-    FILE * fp = fopen("processed.txt","w");
     #pragma omp parallel for \
       default(shared) private(cl,bases,phred,th_id)
     for ( cl=0 ; cl<ncluster ; cl++){
@@ -426,9 +425,7 @@ real_t estimate_Bases(AYB ayb){
 	//for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
 
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
-	fprintf(fp,"%e %e %e %e\n",pcl_int[th_id]->x[0],pcl_int[th_id]->x[1],pcl_int[th_id]->x[2],pcl_int[th_id]->x[3]);
     }   
-    fclose(fp);
 //timestamp("Finished base calling\n",stderr);
     
     for ( int i=0 ; i<ncpu ; i++){ free_MAT(pcl_int[i]); }
