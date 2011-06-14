@@ -576,10 +576,9 @@ int solver( MAT lhs, MAT rhs){
 
 // Solve linear system using SVD
 // tmp should be 6*N
-int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
+int solverSVD(MAT lhs, MAT rhs){
     validate(NULL!=lhs,-4);
     validate(NULL!=rhs,-6);
-    validate(NULL!=tmp,-11);
     
     const int N = lhs->nrow;
     int INFO=0,RANK=0,IWORK=5*N;
@@ -587,6 +586,7 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
     for ( int i=0 ; i<N ; i++){
        lhs->x[i*N+i] += 1.;
     }
+    real_t tmp[6*N];
 
     gelss(&lhs->nrow,&lhs->ncol,&rhs->ncol,lhs->x,&lhs->nrow,
                       rhs->x,&rhs->nrow,tmp,&RCOND,&RANK,tmp+N,&IWORK,&INFO);
