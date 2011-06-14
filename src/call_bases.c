@@ -83,8 +83,8 @@ real_t crosslike(const real_t * restrict p, const real_t lambda, const NUC a, co
  *                                                                     Om_{21} Om_{22}   Om_{32}^t
  *                                                                     0       Om_{32}   Om_{33}  
  */  
-void call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base){
-	if(NULL==base || NULL==p || NULL==omega){ return; }
+real_t call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base){
+	if(NULL==base || NULL==p || NULL==omega){ return NAN; }
         const int ncycle = p->ncol;
         const int lda = omega->ncol;
        
@@ -140,6 +140,8 @@ void call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base){
         for ( int cy=(ncycle-2) ; cy>=0 ; cy--){
                 base[cy] = (NUC)array[cy*NBASE+base[cy+1]];
         }
+
+	return xMy(p->x,omega,p->x) + lambda * minstat;
 }
 
 /** Calculate call qualities (probability of call being in error) using forwards/backwards algorithm

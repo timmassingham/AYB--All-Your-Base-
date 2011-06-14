@@ -25,7 +25,7 @@ struct basequal { NUC base; real_t qual;};
 
 void initialise_calibration(void);
 NUC call_base_simple( const real_t * restrict p);
-void call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base);
+real_t call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base);
 void call_qualities( const MAT p, const real_t lambda, const MAT omega, NUC * base, real_t * qual);
 real_t adjust_quality(const real_t qual, const NUC prior, const NUC base, const NUC next);
 real_t adjust_first_quality(const real_t qual, const NUC base, const NUC next);
