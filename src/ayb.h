@@ -30,6 +30,8 @@
 #include "array.def"
 #undef X
 
+static int nvcat = 4;
+
 
 typedef struct {
     uint32_t ncycle,ncluster;
@@ -45,6 +47,7 @@ typedef struct {
     // coordinates
     COORD coordinates;
     uint16_t index, readnum;
+    uint16_t * lamcat;
 } * AYB;
 
 /* Basic functions */

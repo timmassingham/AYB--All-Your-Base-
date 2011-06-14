@@ -21,7 +21,30 @@
 #include "statistics.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "utility.h"
+
+int cmp_dbl( const void * a, const void * b){
+	real_t a1 = *(real_t *)a;
+	real_t b1 = *(real_t *)b;
+	if(a1==b1){return 0;}
+	return (a1<b1)?-1:1;
+}
+
+void quantiles( const uint_fast32_t nx, const real_t * x, const uint_fast32_t nq, real_t * q){
+	if( NULL==x || NULL==q ){ return; }
+	real_t *tmp = malloc(nx*sizeof(real_t));
+	if(NULL==tmp){ return; }
+	memcpy(tmp,x,nx*sizeof(real_t));
+	qsort(tmp,nx,sizeof(real_t),cmp_dbl);
+
+	for ( int i=0 ; i<nq ; i++){
+		q[i] = (int)(q[i]*nx);
+		if((int)q[i]==nx){ q[i] = nx-1;}
+		q[i] = tmp[(int)(q[i])];
+	}
+}
+
 
 
 real_t sum( const real_t * x, const uint32_t n){

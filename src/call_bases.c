@@ -30,6 +30,7 @@
 #include "call_bases.h"
 #include "options.h"
 #include "lapack.h"
+#include "statistics.h"
 
 #include "tables/newcalibrationS2.tab"
 
@@ -349,63 +350,95 @@ cleanup:
 /*
  *  Calculate covariance of (processed residuals) 
  */
-MAT calculate_covariance( const AYB ayb){
+MAT * calculate_covariance( const AYB ayb){
     const uint32_t ncluster = ayb->ncluster;
     const uint32_t ncycle = ayb->ncycle;
-    
+
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
         
-    real_t wesum = 0.;
     int16_t * cl_intensities;
     NUC * cl_bases;
     const int ncpu = omp_get_max_threads();
     int th_id;
-    int_fast32_t cl=0;
-    MAT p[ncpu],V[ncpu];
-    for( int i=0 ; i<ncpu ; i++){ p[i] = NULL; V[i] = NULL; }
+    int_fast32_t cl=0,vcat=0;
+    MAT p[ncpu],V[ncpu*nvcat];
+    real_t wesum_p[ncpu*nvcat];
+    for( int i=0 ; i<ncpu ; i++){ p[i] = NULL;}
+    for( int i=0 ; i<ncpu*nvcat ; i++){ V[i] = NULL; wesum_p[i] = 0.0;}
     #pragma omp parallel for \
-      default(shared) private(cl,cl_bases,cl_intensities,th_id) \
-      reduction(+:wesum)
+      default(shared) private(cl,cl_bases,cl_intensities,th_id,vcat)
     for ( cl=0 ; cl<ncluster; cl++){
 	th_id = omp_get_thread_num();
+	vcat = ayb->lamcat[cl];
         cl_intensities = ayb->intensities.elt+cl*ncycle*NBASE;
         cl_bases = ayb->bases.elt + cl*ncycle; 
 	p[th_id] =  processNew( AtLU, ayb->N, cl_intensities,p[th_id]);
-        V[th_id] = accumulate_covariance(ayb->we->x[cl],p[th_id],ayb->lambda->x[cl],cl_bases,V[th_id]);
-        wesum += ayb->we->x[cl];
+        V[th_id*nvcat+vcat] = accumulate_covariance(ayb->we->x[cl],p[th_id],ayb->lambda->x[cl],cl_bases,V[th_id*nvcat+vcat]);
+        wesum_p[th_id*nvcat+vcat] += ayb->we->x[cl];
     }
    
     // Accumulate per-thread results
-    int lda = V[0]->nrow;
-    MAT Vsum = new_MAT(lda,lda);
+    // Accumulate wesum
+    real_t wesum[nvcat]; for ( int i=0 ; i<nvcat ; i++){ wesum[i] = 0.0; }
     for ( int i=0 ; i<ncpu ; i++){
-	    if(NULL!=V[i]){
+	for ( int j=0 ; j<nvcat ; j++){
+		wesum[j] += wesum_p[i*nvcat+j];
+	}
+    }
+    // Accumulate Vsum
+    int lda = V[0]->nrow;
+    MAT * Vsum = malloc(nvcat*sizeof(*Vsum));
+    for ( int i=0 ; i<nvcat ; i++){ Vsum[i] = new_MAT(lda,lda); }
+    for ( int i=0 ; i<ncpu ; i++){
+	    for ( int vcat=0 ; vcat<nvcat ; vcat++){
+	    	if(NULL!=V[i*nvcat+vcat]){
 		    for ( int j=0 ; j<lda*lda ; j++){
-			    Vsum->x[j] += V[i]->x[j];
+			    Vsum[vcat]->x[j] += V[i*nvcat+vcat]->x[j];
 		    }
+		}
 	    }
     }
     for ( int i=0 ; i<ncpu ; i++){
     	free_MAT(p[i]);
+    }
+    for( int i=0 ; i<ncpu*nvcat ; i++){
     	free_MAT(V[i]);
     }
     free_MAT(AtLU.mat);
     free(AtLU.piv);
 
     // V is lower triangular
-    for ( int i=0 ; i<lda ; i++){
-       for ( int j=0 ; j<i ; j++){
-	  Vsum->x[i*lda+j] = Vsum->x[j*lda+i];
-       }
+    for ( int vcat=0 ; vcat<nvcat ; vcat++){
+    	for ( int i=0 ; i<lda ; i++){
+       		for ( int j=0 ; j<i ; j++){
+	  		Vsum[vcat]->x[i*lda+j] = Vsum[vcat]->x[j*lda+i];
+		}
+        }
     }
 
     // Scale sum of squares to make covariance
-    for ( uint32_t i=0 ; i<lda*lda ; i++){
-            Vsum->x[i] /= wesum;
+    for ( int vcat=0 ; vcat<nvcat ; vcat++){
+    	for ( uint32_t i=0 ; i<lda*lda ; i++){
+            Vsum[vcat]->x[i] /= wesum[vcat];
         }
+    }
 
     return Vsum;
 }
 
+
+void categorise_lambdas( const MAT lambda, uint16_t * lamcat){
+	const int ncluster = lambda->nrow;
+	real_t qprobs[4] = { 0.25, 0.5, 0.75, 1.0};
+	quantiles(ncluster,lambda->x,nvcat,qprobs);
+	for ( int i=0 ; i<ncluster ; i++){
+		int idx=0;
+		for ( idx=0 ; idx<nvcat ; idx++){
+			if(lambda->x[i]<qprobs[idx]){ break; }
+		}
+		if(idx==nvcat){ idx--; }
+		lamcat[i] = idx;
+	}
+}
 

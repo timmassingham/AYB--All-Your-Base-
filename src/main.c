@@ -311,62 +311,12 @@ void dump_qseq( FILE * fp, const AYB ayb){
     }
 }
 
-/* Refactor: this function repeats much of estimate_Bases in ayb.c */
-void dump_likelihood( FILE * fp, const AYB ayb){
-    validate(NULL!=fp,);
-    validate(NULL!=ayb,);
-    const uint32_t ncycle = ayb->ncycle;
-    const uint32_t ncluster = ayb->ncluster;
-
-    if(!ayb->coordinates){
-	fprintf(stderr,"Attempting to write likelihood output but coordinates not available\nCoordinates will be zero'd.\n");
-    }
-
-    // Calculate variance matrices and invert
-    MAT V = calculate_covariance(ayb);
-    XFILE * vout = xfopen("information.txt",XFILE_RAW,"w");
-    MAT a = V;
-    show_MAT(vout,a,0,0);
-    V = invertSym(a);
-    free_MAT(a);
-    xfclose(vout);
-    
-    MAT pcl_int = NULL;
-    //MAT invAt = invert(ayb->At); //transpose(ayb->A);
-    struct structLU AtLU = LUdecomposition(ayb->At);
-
-    real_t like[4] = {NAN,NAN,NAN,NAN};
-    for ( uint32_t cl=0 ; cl<ncluster ; cl++){
-       // Process intensities
-       const real_t lambda = ayb->lambda->x[cl];
-       pcl_int =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int);
-       // Coordinates
-       uint16_t x=0,y=0;
-       if(ayb->coordinates){
-	  x = ayb->coordinates->x[cl];
-	  y = ayb->coordinates->y[cl];
-       }
-       fprintf(fp,"%" SCNu32 "\t%" SCNu32 "\t%" SCNu16 "\t%" SCNu16, aybopt.lane,aybopt.tile,x,y);
-       for ( uint32_t cy=0 ; cy<ncycle ; cy++){
-	  //call_likelihoods(pcl_int->x+cy*NBASE,lambda,V[cy],like);
-          fprintf(fp,"\t%3.2f %3.2f %3.2f %3.2f",like[0],like[1],like[2],like[3]);
-       }
-       fputc('\n',fp);
-    }
-    free_MAT(AtLU.mat);
-    free(AtLU.piv);
-    free_MAT(pcl_int);
-    free(V);
-}
-
-
 
 void dump_results(FILE * fp, const AYB ayb){
     switch(aybopt.output_format){
     case OUTPUT_FASTA: dump_fasta(fp,ayb); break;
     case OUTPUT_FASTQ: dump_fastq(fp,ayb); break;
     case OUTPUT_QSEQ:  dump_qseq(fp,ayb);  break;
-    case OUTPUT_LIKE:  dump_likelihood(fp,ayb); break;
     default:
         errx(EXIT_FAILURE,"Unrecognised output format %s in %s (%s:%d)\n",
             output_format_str[aybopt.output_format],__func__,__FILE__,__LINE__);

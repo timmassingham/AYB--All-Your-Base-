@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include "utility.h"
 
+void quantiles( const uint_fast32_t nx, const real_t * x, const uint_fast32_t nq, real_t * q);
 // Compensated means and variances
 real_t mean( const real_t * x, const uint32_t n);
 real_t variance( const real_t * x, const uint32_t n);

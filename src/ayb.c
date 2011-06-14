@@ -72,6 +72,7 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->lambda = new_MAT(ncluster,1);
     ayb->we = new_MAT(ncluster,1);
     ayb->cycle_var = new_MAT(4*ncycle,1);
+    ayb->lamcat = calloc(ncluster,sizeof(int16_t));
 
     // Filtering
     ayb->filtered = false;
@@ -81,7 +82,8 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->readnum = 0;    
     
     if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M ||
-        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || NULL==ayb->At){
+        NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || 
+	NULL==ayb->At|| NULL==ayb->lamcat ){
         goto cleanup;
     }
     
@@ -106,6 +108,7 @@ void free_AYB(AYB ayb){
     free_MAT(ayb->we);
     free_MAT(ayb->cycle_var);
     free_MAT(ayb->lambda);
+    free(ayb->lamcat);
     xfree(ayb->passed_filter);
     free_COORD(ayb->coordinates);
     xfree(ayb);
@@ -148,6 +151,9 @@ AYB copy_AYB(const AYB ayb){
     
     ayb_copy->lambda = copy_MAT(ayb->lambda);
     if(NULL!=ayb->lambda && NULL==ayb_copy->lambda){ goto cleanup;}
+    ayb_copy->lamcat = calloc(ayb->ncluster,sizeof(int16_t));
+    if(NULL==ayb_copy->lamcat){ goto cleanup; }
+    memcpy(ayb_copy->lamcat,ayb->lamcat,ayb->ncluster*sizeof(int16_t));
     
     ayb_copy->filtered = ayb->filtered;
     ayb_copy->passed_filter = calloc(ayb->ncluster,sizeof(bool));
@@ -319,7 +325,7 @@ real_t update_cluster_weights(AYB ayb){
  *  Scales all lambda by factor
  */
 const real_t ridgeConst = 1000000.0;
-MAT gblOmega = NULL;
+MAT * gblOmega = NULL;
 real_t estimate_MPC( AYB ayb ){
     validate(NULL!=ayb,NAN);
     const uint32_t ncycle = ayb->ncycle;
@@ -386,19 +392,23 @@ real_t estimate_Bases(AYB ayb){
     const uint32_t ncycle   = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
 //timestamp("Calculating covariance\n",stderr);
-    MAT V = calculate_covariance(ayb);
+    categorise_lambdas(ayb->lambda,ayb->lamcat);
+    MAT * V = calculate_covariance(ayb);
     // Scale is variance of residuals. Get from V matrices.
-    for ( uint32_t i=0 ; i<4*ncycle ; i++){
+    /*for ( uint32_t i=0 ; i<4*ncycle ; i++){
         ayb->cycle_var->x[i] = V->x[i*ncycle*NBASE+i];
+    }*/
+
+    if(NULL==gblOmega){
+	    gblOmega = calloc(nvcat,sizeof(*gblOmega));
+	    if(NULL==gblOmega){ return NAN;}
     }
+    for ( int vcat=0 ; vcat<nvcat ; vcat++){
+    	gblOmega[vcat] = fit_omega(V[vcat],gblOmega[vcat],false);
+	free_MAT(V[vcat]);
+    }
+    free(V); V = NULL;
 
-    gblOmega = fit_omega(V,gblOmega,false);
-    free_MAT(V); V = NULL;
-
-    instrument( XFILE * matfp = xfopen("information.txt",XFILE_RAW,"w");
-	        show_MAT(matfp,gblOmega,0,0);
-                xfclose(matfp);
-	  );
 
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
     struct structLU AtLU = LUdecomposition(ayb->At);
@@ -407,28 +417,28 @@ real_t estimate_Bases(AYB ayb){
     //real_t qual[ncycle];
     int th_id;
     const int ncpu = omp_get_max_threads();
-    int_fast32_t cl=0;
+    int_fast32_t cl=0,vcat=0;
     NUC * bases = NULL;
     PHREDCHAR * phred = NULL;
     MAT pcl_int[ncpu];
     for ( int i=0 ; i<ncpu ; i++){ pcl_int[i] = NULL; }
-    FILE * fp = fopen("processed.txt","w");
+
     #pragma omp parallel for \
-      default(shared) private(cl,bases,phred,th_id)
+      default(shared) private(cl,bases,phred,th_id,vcat)
     for ( cl=0 ; cl<ncluster ; cl++){
 	th_id = omp_get_thread_num();
+	vcat = ayb->lamcat[cl];
+	//fprintf(stderr,"Thread %d has cluster with lambda = %f, vcat=%d\n",th_id,ayb->lambda->x[cl],vcat);
         bases = ayb->bases.elt + cl*ncycle;
         phred = ayb->quals.elt + cl*ncycle;
 	pcl_int[th_id] =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int[th_id]);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
-	call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases);
+	call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega[vcat],bases);
 	//for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
 
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
-	fprintf(fp,"%e %e %e %e\n",pcl_int[th_id]->x[0],pcl_int[th_id]->x[1],pcl_int[th_id]->x[2],pcl_int[th_id]->x[3]);
     }   
-    fclose(fp);
 //timestamp("Finished base calling\n",stderr);
     
     for ( int i=0 ; i<ncpu ; i++){ free_MAT(pcl_int[i]); }
@@ -437,3 +447,4 @@ real_t estimate_Bases(AYB ayb){
     
     return NAN;
 }
+
