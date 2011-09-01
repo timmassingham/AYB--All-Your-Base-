@@ -145,7 +145,7 @@ void call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base){
 }
 
 
-/** Calculate call qualities (probability of call being in error) using forwards/backwards algorithm
+/** Calculate call qualities (probability of call being in error)
  */
 void call_qualities( const MAT p, const real_t lambda, const MAT omega, NUC * base, real_t * qual){
 	const int ncycle = p->ncol;
