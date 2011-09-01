@@ -462,7 +462,7 @@ void analyse_tile( XFILE * fp){
         timestamp(" * parameter estimation\n",stderr);
         estimate_MPC(ayb);
         timestamp(" * base calling\n",stderr);
-        estimate_Bases(ayb);
+        estimate_Bases(ayb,(i+1)==aybopt.niter);
     }
 
     

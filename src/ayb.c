@@ -380,7 +380,7 @@ real_t estimate_MPC( AYB ayb ){
     return sumLSS;//-delta;
 }
 
-real_t estimate_Bases(AYB ayb){
+real_t estimate_Bases(AYB ayb, const bool lastIt){
     validate(NULL!=ayb,NAN);
     //initialise_calibration();
     const uint32_t ncycle   = ayb->ncycle;
@@ -404,7 +404,6 @@ real_t estimate_Bases(AYB ayb){
     struct structLU AtLU = LUdecomposition(ayb->At);
 
 //timestamp("Base calling loop\n",stderr);
-    //real_t qual[ncycle];
     int th_id;
     const int ncpu = omp_get_max_threads();
     int_fast32_t cl=0;
@@ -415,6 +414,7 @@ real_t estimate_Bases(AYB ayb){
     #pragma omp parallel for \
       default(shared) private(cl,bases,phred,th_id)
     for ( cl=0 ; cl<ncluster ; cl++){
+	real_t qual[ncycle];
 	th_id = omp_get_thread_num();
         bases = ayb->bases.elt + cl*ncycle;
         phred = ayb->quals.elt + cl*ncycle;
@@ -422,7 +422,17 @@ real_t estimate_Bases(AYB ayb){
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
 	call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases);
-	//for(int i=0 ; i<ncycle ; i++){ qual[i] = 40.0;}
+	if(lastIt){
+		call_qualities(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases,qual);
+		qual[0] = adjust_first_quality(qual[0], bases[0], bases[1]);
+		for ( int i=1 ; i<(ncycle-1) ; i++){
+			qual[i] = adjust_quality(qual[i], bases[i-1], bases[i], bases[i+1]);
+		}
+		qual[ncycle-1] = adjust_last_quality(qual[ncycle-1], bases[ncycle-2], bases[ncycle-1]);
+		for ( int i=0 ; i<ncycle ; i++){
+			phred[i] = phredchar_from_quality(qual[i]);
+		}
+	}
 
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
     }   

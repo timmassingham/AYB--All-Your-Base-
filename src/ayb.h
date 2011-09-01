@@ -58,7 +58,7 @@ void show_AYB(XFILE * fp, const AYB ayb);
 AYB initialise_AYB(const CIFDATA cif);
 
 real_t estimate_MPC( AYB ayb );
-real_t estimate_Bases(AYB ayb);
+real_t estimate_Bases(AYB ayb, const bool lastIt);
 
 #endif /* _AYB_H */
 

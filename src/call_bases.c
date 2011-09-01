@@ -31,7 +31,9 @@
 #include "options.h"
 #include "lapack.h"
 
-#include "tables/newcalibrationS2.tab"
+#include "tables/76cyLall.h"
+
+const static real_t Mu = 1e-5;
 
 real_t logadd(const real_t a, const real_t b){
 	return (a>b)?
@@ -142,88 +144,54 @@ void call_base( const MAT p, const real_t lambda, const MAT omega, NUC * base){
         }
 }
 
+
 /** Calculate call qualities (probability of call being in error) using forwards/backwards algorithm
  */
 void call_qualities( const MAT p, const real_t lambda, const MAT omega, NUC * base, real_t * qual){
-	if(NULL==base || NULL==p || NULL==omega || NULL==qual){ return; }
 	const int ncycle = p->ncol;
 	const int lda = omega->ncol;
-
-	// Forwards array
-	real_t fwd[4*ncycle];
-	// Initialise. Dealing with log-probabilities
-	for ( int b=0 ; b<4 ; b++){
-		fwd[b] = -0.5 * lambda * baselike(p->x,lambda,b,omega->x,ncycle);
-	}
-	for ( int cy=1; cy<ncycle ; cy++){
+	for ( int cy=0 ; cy<ncycle ; cy++){
+		real_t stat[4] = {0,0,0,0};
 		for ( int b=0 ; b<NBASE ; b++){
-			fwd[cy*4+b] = -HUGE_VAL;
-			// Sum over calls for previous cycle
-			for ( int prev=0 ; prev<NBASE ; prev++){
-				fwd[cy*4+b] = logadd( fwd[cy*4+b], fwd[(cy-1)*4+prev]-lambda*crosslike(p->x+(cy-1)*NBASE,lambda,prev,b,omega->x+(cy-1)*NBASE*lda+cy*NBASE,ncycle) );
+			real_t res[4];
+			for ( int b2=0 ; b2<NBASE ; b2++){
+				res[b2] = p->x[cy*4+b2];
 			}
-			// Contribution from calling b at cycle cy, independent from other cycles
-			fwd[cy*4+b] += -0.5*lambda * baselike(p->x+cy*NBASE,lambda,b,omega->x+cy*NBASE*lda+cy*NBASE,ncycle);
+			res[b] -= lambda;
+			for ( int i=0 ; i<NBASE ; i++){
+				real_t acc = 0.0;
+				for ( int j=0 ; j<NBASE ; j++){
+					acc += res[j] * omega->x[(4*cy+i)*lda + (4*cy+j)];
+				}
+				stat[b] += res[i] * acc;
+			}
 		}
-	}
 
-	// Backwards
-	real_t bwd[4*ncycle];
-	// Initialise. Dealing with log-probabilities
-	for ( int b=0 ; b<4 ; b++){
-		bwd[(ncycle-1)*4+b] = -0.5*lambda * baselike(p->x+(ncycle-1)*4,lambda,b,omega->x,ncycle);
-	}
-	for ( int cy=ncycle-1 ; cy>0 ; cy--){
+		real_t maxStat = stat[base[cy]];
+		real_t tot = 0.0;
 		for ( int b=0 ; b<NBASE ; b++){
-			bwd[(cy-1)*4+b] = -HUGE_VAL;
-			// Sum over calls for previous cycle
-			for ( int nxt=0 ; nxt<NBASE ; nxt++){
-				bwd[(cy-1)*4+b] = logadd( bwd[(cy-1)*4+b], bwd[cy*4+nxt]-lambda*crosslike(p->x+(cy-1)*NBASE,lambda,b,nxt,omega->x+(cy-1)*NBASE*lda+cy*NBASE,ncycle) );
-			}
-			// Contribution from calling b at cycle cy-1, independent from other cycles
-			bwd[(cy-1)*4+b] += -0.5*lambda * baselike(p->x+(cy-1)*NBASE,lambda,b,omega->x+(cy-1)*NBASE*lda+(cy-1)*NBASE,ncycle);
+			stat[b] = exp(-0.5*(stat[b]-maxStat));
+			tot += stat[b];
 		}
-	}
+		real_t maxprob = exp(-0.5*maxStat);
+		real_t post_prob = (maxprob<Mu) ?
+			       // Case probabilities small compared to mu
+			       (Mu + maxprob ) / (4.0*Mu + maxprob*tot) :
+			       // Case probabilities large compared to mu
+			       (Mu/maxprob + 1.) / (4.0*Mu/maxprob + tot);
+		post_prob *= 1-1e-4;
 
-	// Work out qualities
-	/*fputs("ML : ",stderr);
-	for( int i=0 ; i<ncycle ; i++){
-		show_NUC(stderr,base[i]);
-	}
-	fputc('\n',stderr);
-	fputs("MAP: ",stderr);*/
-	real_t loglike[ncycle];
-	for ( int i=0 ; i<ncycle ; i++){
-		real_t sum = 0.0;
-		real_t calledlogprob = fwd[i*4+base[i]] + bwd[i*4+base[i]] + 0.5*lambda * baselike(p->x+i*NBASE,lambda,base[i],omega->x+i*NBASE*lda+i*NBASE,ncycle);
-		real_t bestlogprob = -HUGE_VAL;
-		int bestbase = base[i];
-		for ( int b=0 ; b<4 ; b++){
-			real_t baselogprob =  fwd[i*4+b] + bwd[i*4+b] + 0.5*lambda * baselike(p->x+i*NBASE,lambda,b,omega->x+i*NBASE*lda+i*NBASE,ncycle) - calledlogprob;
-			if(baselogprob>bestlogprob){ bestbase=b; bestlogprob=baselogprob;}
-			fprintf(stderr,"\t%e",baselogprob);
-			if(b==base[i]){ continue;}
-			sum += exp(baselogprob);
-		}
-		fputc('\n',stderr);
-		qual[i] = -10.0*(log(sum)-log1p(sum))/M_LN10;
-		//show_NUC(stderr,bestbase);
-		loglike[i] = calledlogprob - log1p(sum);
-		base[i] = bestbase;
-	}
-	/*fputc('\n',stderr);
-	for(int i=0 ; i<ncycle ; i++){
-		fprintf(stderr," %4d",(int)(qual[i]+0.5));
-	}
-	fprintf(stderr,"\tlog-like = %e %e %e\n",loglike[0],loglike[ncycle/2],loglike[ncycle-1]);*/
 
+		qual[cy] = qual_from_prob(post_prob);
+	}
 }
 
 
-	
 
 real_t adjust_quality(const real_t qual, const NUC prior, const NUC base, const NUC next){
-   return calibration_intercept + calibration_scale * qual + calibration_baseprior_adj[prior*NBASE+base] + calibration_basenext_adj[next*NBASE+base] + calibration_priorbasenext_adj[(next*NBASE+prior)*NBASE+base];
+
+   real_t adj = calibration_intercept + calibration_scale * qual + calibration_baseprior_adj[prior*NBASE+base] + calibration_basenext_adj[next*NBASE+base] + calibration_priorbasenext_adj[(next*NBASE+prior)*NBASE+base];
+   return adj;
 }
 
 real_t adjust_first_quality(const real_t qual, const NUC base, const NUC next){
