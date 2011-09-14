@@ -1,19 +1,19 @@
 CC = gcc
-#CFLAGS = -m64 -Wall -ffast-math -O4 -funroll-loops -DNDEBUG -fomit-frame-pointer -std=gnu99 -msse2 -Wno-unused-function -fstrict-aliasing 
-CFLAGS = -std=c99 -Wall -g -std=gnu99 -fstack-protector-all -D_FORTIFY_SOURCE=2 -Wno-unused-function
-#CFLAGS = -O3 -pg -std=gnu99 
+CFLAGS = -m64 -Wall -ffast-math -O4 -funroll-loops -DNDEBUG -fomit-frame-pointer -std=gnu99 -msse2 -Wno-unused-function -fstrict-aliasing  -fopenmp
+#CFLAGS = -std=c99 -Wall -g -std=gnu99 -fstack-protector-all -D_FORTIFY_SOURCE=2 -Wno-unused-function -fopenmp 
+#CFLAGS = -O3 -pg -std=gnu99 -fopenmp
 LD = ld
-LDFLAGS = -L. -lgfortran -lm -lz -lbz2 -lblas -llapack -lg2c
+LDFLAGS = -L. -lm -lz -lbz2 -lblas -llapack
 INCFLAGS = 
 MANDIR = ../man
 DEFINES = -D_GNU_SOURCE -D__linux
 #DEFINES = -DHAS_REALLOCF
-objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o dnnls.o
+objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o conjugate.o
 
 all: ayb
 
 ayb: $(objects)
-	gcc -m64 -o ../bin/$@ $(LDFLAGS) $(objects) 
+	gcc -o ../bin/$@ $(CFLAGS) $(LDFLAGS) $(objects) 
 
 
 .c.o:

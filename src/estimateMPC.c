@@ -595,7 +595,7 @@ int solverSVD(MAT lhs, MAT rhs, real_t * tmp){
     return INFO;
 }
 
-
+/*
 void dnnls_(double *A, int * MDA, int * M, int* N, double * B, double * X, double * RNORM, double * W, double * ZZ, int * INDEX, int * MODE);
 
 int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
@@ -618,7 +618,7 @@ int solveNonneg(MAT lhs, MAT rhs, real_t *tmp){
     free(lhs_tmp);
     free(rhs_tmp);
     return MODE;
-}
+}*/
 
 
 #ifdef TEST

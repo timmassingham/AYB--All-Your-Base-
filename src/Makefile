@@ -8,7 +8,7 @@ INCFLAGS =
 MANDIR = ../man
 #DEFINES = -D_GNU_SOURCE __linux
 DEFINES = -DHAS_REALLOCF -DINSTRUMENT
-objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o dnnls.o conjugate.o
+objects = cif.o xio.o ayb.o matrix.o nuc.o estimate_lambda.o utility.o call_bases.o process_intensities.o estimateMPC.o statistics.o options.o main.o coordinates.o conjugate.o
 
 all: ayb
 
