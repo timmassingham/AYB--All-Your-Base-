@@ -4,7 +4,7 @@
 #include "utility.h"
 
 /**  Update gamma_i using Polak and Ribiere method
- *  gamma_i = (gradNew - gradOld) . gradNew  / gradNew.gradNew
+ *  gamma_i = (gradNew - gradOld) . gradNew  / gradOld.gradOld
  */
 real_t gammaI( const real_t * gradOld, const real_t * gradNew, const unsigned int n){
 	if(NULL==gradOld || NULL==gradNew){ return NAN;}
@@ -108,7 +108,7 @@ void gradObj(const real_t *u,const unsigned int np, real_t * g, void * info){
  *  scalars a, b and the vector ratio[]. See linemin_obj for details.
  */
 real_t deltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
-	if(NULL==ratio || !finite(lambda) || !finite(a) || !finite(b)){ return NAN; }
+	if(NULL==ratio || !isfinite(lambda) || !isfinite(a) || !isfinite(b)){ return NAN; }
 	real_t res = lambda*(a + b * lambda);
 	for ( int i=0 ; i<n ; i++){
 		res -= 2.0 *log1p(lambda*ratio[i]);
@@ -121,7 +121,7 @@ real_t deltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
  *  scalars a, b and the vector ratio[]. See linemin_obj for details.
  */
 real_t ddeltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
-	if(NULL==ratio || !finite(lambda) || !finite(a) || !finite(b)){ return NAN; }
+	if(NULL==ratio || !isfinite(lambda) || !isfinite(a) || !isfinite(b)){ return NAN; }
 	real_t res = a + 2.0 * b * lambda;
 	for ( int i=0 ; i<n ; i++){
 		res -= 2.0*ratio[i]/(1.0+lambda*ratio[i]);
@@ -134,7 +134,7 @@ real_t ddeltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
  *  scalars a, b and the vector ratio[]. See linemin_obj for details.
  */
 real_t d2deltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
-	if(NULL==ratio || !finite(lambda) || !finite(a) || !finite(b)){ return NAN; }
+	if(NULL==ratio || !isfinite(lambda) || !isfinite(a) || !isfinite(b)){ return NAN; }
 	real_t res = 2.0 * b;
 	for ( int i=0 ; i<n ; i++){
 		real_t r = ratio[i] / (1.0+lambda*ratio[i]);
@@ -149,7 +149,7 @@ real_t d2deltaObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
  *  Slightly more efficient than calculating both separately.
  */
 real_t newtonObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
-	if(NULL==ratio || !finite(lambda) || !finite(a) || !finite(b)){ return NAN; }
+	if(NULL==ratio || !isfinite(lambda) || !isfinite(a) || !isfinite(b)){ return NAN; }
 	real_t top=0.0,bot=0.0;
 	top = a + 2.0 * b * lambda;
 	bot = 2.0 * b;
@@ -165,13 +165,13 @@ real_t newtonObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
   *  (-inf,0) -> (min_cut,0)
   */
 real_t transform( real_t lam, real_t min_cut){
-   return finite(min_cut) ? (-expm1(lam)*min_cut) : lam;
+   return isfinite(min_cut) ? (-expm1(lam)*min_cut) : lam;
 }
 /**  Derviative of coordinate transform to ensure that lambda never crosses min_cut
   *  (-inf,0) -> (min_cut,0)
   */
 real_t dtransform( real_t lamt, real_t min_cut){
-   return finite(min_cut) ? (lamt-min_cut) : 1.0;
+   return isfinite(min_cut) ? (lamt-min_cut) : 1.0;
 }
 
 

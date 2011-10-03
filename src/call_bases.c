@@ -48,7 +48,7 @@ real_t logadd(const real_t a, const real_t b){
  *  Returns -2*I_b^t om p + lambda * I_b^t om I^b, where I_b is indicator vector of base b
  */
 real_t baselike (const real_t * restrict p, const real_t lambda, const NUC b, const real_t * om, const int ncycle){
-       if(NULL==p || NULL==om || !finite(lambda) || NUC_AMBIG==b){ return NAN;}
+       if(NULL==p || NULL==om || !isfinite(lambda) || NUC_AMBIG==b){ return NAN;}
        const int lda = 4*ncycle;
        real_t like = lambda*om[b*lda+b];
        for ( int i=0 ; i<4 ; i++){
@@ -65,7 +65,7 @@ real_t baselike (const real_t * restrict p, const real_t lambda, const NUC b, co
  *  Returns lambda I_b^t om I_a - p_{i+1}^t om p_{i} - p_{i}^t om p_{i+1}^t
  */
 real_t crosslike(const real_t * restrict p, const real_t lambda, const NUC a, const NUC b, const real_t * om, const int ncycle){
-	if(NULL==p || NULL==om || !finite(lambda) || NUC_AMBIG==b || NUC_AMBIG==b){ return NAN;}
+	if(NULL==p || NULL==om || !isfinite(lambda) || NUC_AMBIG==b || NUC_AMBIG==b){ return NAN;}
         const int lda = 4*ncycle;
         real_t like = lambda*om[a*lda+b];
         for ( int i=0 ; i<4 ; i++){
@@ -179,7 +179,7 @@ void call_qualities( const MAT p, const real_t lambda, const MAT omega, NUC * ba
 			       (Mu + maxprob ) / (4.0*Mu + maxprob*tot) :
 			       // Case probabilities large compared to mu
 			       (Mu/maxprob + 1.) / (4.0*Mu/maxprob + tot);
-		post_prob *= 1-1e-4;
+		post_prob *= 1.0-1e-4;
 
 
 		qual[cy] = qual_from_prob(post_prob);
