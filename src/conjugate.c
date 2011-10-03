@@ -323,7 +323,7 @@ MAT fit_omega(const MAT V, MAT omega, const bool returnInverse){
 	MAT d = copy_MAT(grad);
 
 	// Conjugate gradient optimisation
-	int max_it = 40;
+	int max_it = 400;
 	real_t initObj = objective(omega->x,n*n,(void *)V);
 	for ( int i=0 ; i<max_it ; i++){
 		// Minimise along direction.
