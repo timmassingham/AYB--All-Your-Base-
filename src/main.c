@@ -209,8 +209,6 @@ void parse_arguments( const int argc, char * const argv[] ){
                        }
 		       break;
 	    case 'p':  aybopt.ncpu = parse_uint(optarg);
-		       omp_set_num_threads(aybopt.ncpu);
-		       fprintf(stderr,"Going to use %d threads (set %d).\n",omp_get_max_threads(),aybopt.ncpu);
 		       break;
             case 'r':  aybopt.run_number = parse_uint(optarg);
                        break;
@@ -528,6 +526,10 @@ int main(int argc, char * argv[]){
     parse_arguments(argc,argv);
     argc -= optind;
     argv += optind;
+
+    omp_set_num_threads(aybopt.ncpu);
+    int nthr = omp_get_max_threads();
+    fprintf(stderr,"Going to use %d thread%s (set %d).\n",nthr,nthr==1?"":"s",aybopt.ncpu);
     
     // Validate arguments
     if( aybopt.output_format==OUTPUT_QSEQ && aybopt.coordinate_file==NULL){
