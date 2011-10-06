@@ -477,7 +477,8 @@ real_t omArr[] = {
 
 // Objective is 72.68812
 
-int main(void){
+int main(int argc, char * argv[]){
+if(argc==1){
 	MAT V = new_MAT_from_array(16,16,vArr);
 	/*MAT Om0 = new_MAT_from_array(16,16,omArr);
 	cholesky(Om0);
@@ -503,11 +504,29 @@ int main(void){
 		}
 	}*/
 
-	MAT omega = fit_omega(V,NULL);
+	MAT omega = fit_omega(V,NULL,false);
 	MAT omegaInv = invertSym(omega);
 	show_MAT(xstdout,V,0,0);
 	show_MAT(xstdout,omegaInv,0,0);
 	show_MAT(xstdout,omega,0,0);
+} else {  //read from file
+               
+       FILE * fp = fopen(argv[1],"r");
+       int nr,nc;
+       fscanf(fp,"%d%d",&nr,&nc);
+       if(nr!=nc){ errx(EXIT_FAILURE,"nrow!=ncol");}
+       real_t * x = calloc(nr*nc,sizeof(real_t));
+       for ( int i=0 ; i<nr*nc ; i++){
+               fscanf(fp,real_format_str,&x[i]);
+       }
+       MAT m = new_MAT_from_array(nr,nc,x);
+       MAT omega2 = fit_omega(m,NULL,false);
+       MAT omegaInv2 = invertSym(omega2);
+       //show_MAT(xstdout,m,0,0);
+       //show_MAT(xstdout,omegaInv2,0,0);
+       show_MAT(xstdout,omega2,0,0);
+}
+
 
 
 	
