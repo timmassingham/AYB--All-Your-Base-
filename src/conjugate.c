@@ -161,17 +161,22 @@ real_t newtonObj(real_t lambda, real_t a, real_t b, real_t * ratio, int n){
 	return top/bot;
 }
 
+/**  AlmostOne
+ *  Constant that is almost one so ensure that lambda can never 
+ *  actually be equal to min_cut. 
+ */ 
+static const real_t almostOne = 1.0 - 3.0e-8;
 /**  Coordinate transform to ensure that lambda never crosses min_cut
-  *  (-inf,0) -> (min_cut,0)
-  */
+ *  (-inf,0) -> (min_cut*almostOne,0)
+ */
 real_t transform( real_t lam, real_t min_cut){
-   return isfinite(min_cut) ? (-expm1(lam)*min_cut) : lam;
+   return isfinite(min_cut) ? almostOne*(-expm1(lam)*min_cut) : lam;
 }
 /**  Derviative of coordinate transform to ensure that lambda never crosses min_cut
-  *  (-inf,0) -> (min_cut,0)
+  *  (-inf,0) -> (min_cut*almostOne,0)
   */
 real_t dtransform( real_t lamt, real_t min_cut){
-   return isfinite(min_cut) ? (lamt-min_cut) : 1.0;
+   return isfinite(min_cut) ? almostOne*(lamt-min_cut) : 1.0;
 }
 
 
@@ -250,8 +255,12 @@ real_t linemin_obj(real_t *u,const unsigned int np, const real_t * d, void * inf
 	for ( int i=0 ; i<max_it ; i++){
 		// Transformed lambda
 	        real_t lambda_tran = transform(lambda,min_cut);
-		// Newton adjustment to Lambda
+		// Newton adjustment to Lambda (bound by 2.0 to reduce
+		// possibility of diverging to infinity).
 		real_t adj = newtonObj(lambda_tran,a,b,ratio,n)/dtransform(lambda_tran,min_cut);
+		if(fabs(adj)>2.0){
+			adj = (adj>0.0)?2.0:-2.0;
+		}
 
 		// Ensure solution has improved
 		// Repeatly halve adjustment until definitely have improvement.
@@ -310,7 +319,7 @@ MAT fit_omega(const MAT V, MAT omega, const bool returnInverse){
 	if(omega==NULL){
 	   omega = new_MAT(n,n);
 	   if(NULL==omega){ return NULL; }
-	   for ( int i=0 ; i<n ; i++){ omega->x[i*n+i] = 1.0/V->x[i*n+i]; }
+	   for ( int i=0 ; i<n ; i++){ omega->x[i*n+i] = 1.e-5 + 1.0/(1.0e-5 + V->x[i*n+i]); }
 	}
 	// Get Cholesky factorisation
 	cholesky(omega);
