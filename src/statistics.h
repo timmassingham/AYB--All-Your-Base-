@@ -29,6 +29,7 @@ real_t mean( const real_t * x, const uint32_t n);
 real_t variance( const real_t * x, const uint32_t n);
 real_t wmean( const real_t * w, const real_t * x, const uint32_t n);
 real_t wvariance( const real_t * w, const real_t * x, const uint32_t n);
+real_t median( const real_t * x, const uint32_t n);
 
 // Linear regression
 real_t * linearRegression( const real_t * x, const real_t * y, const uint32_t n, real_t *res);

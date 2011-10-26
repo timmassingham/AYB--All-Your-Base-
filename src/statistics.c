@@ -22,6 +22,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "utility.h"
+#include <string.h>
+#include <math.h>
 
 
 real_t sum( const real_t * x, const uint32_t n){
@@ -37,6 +39,35 @@ real_t sum( const real_t * x, const uint32_t n){
     }
     return sum;
 }
+
+int cmpReal(const void * x, const void * y){
+   if( *(real_t*)(x) == *(real_t*)(y) ){ return 0;}
+   return *(real_t*)(x)>*(real_t*)(y)?1:-1;
+}
+
+bool isodd(const uint32_t n){
+   return n%2;
+}
+
+// Median by sorting.
+// Divide and conquer would be quicker (linear vs n log(n) )
+real_t median( const real_t * x, const uint32_t n){
+   if(NULL==x){ return NAN;}
+   if(0==n){ return NAN;}
+
+   real_t * xc = calloc(n,sizeof(double));
+   if(NULL==xc){ return NAN;}
+
+   memcpy(xc,x,n*sizeof(real_t));
+   qsort(xc,n,sizeof(real_t),cmpReal);
+
+   int minIdx = (n-1)/2;
+   real_t ret = isodd(n)?xc[minIdx]:0.5*(xc[minIdx]+xc[minIdx+1]);
+   free(xc);
+
+   return ret;
+}
+
     
 /*  Mean by compensated summation
  * See: http://en.wikipedia.org/wiki/Kahan_summation_algorithm
