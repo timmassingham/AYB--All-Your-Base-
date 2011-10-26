@@ -36,7 +36,7 @@ typedef struct {
     ARRAY(int16_t) intensities;
     ARRAY(NUC) bases;
     ARRAY(PHREDCHAR) quals;
-    MAT M,P,N,lambda;
+    MAT M,P,N,lambda,lss;
     MAT At;
     MAT we, cycle_var;
     // Information about filtering

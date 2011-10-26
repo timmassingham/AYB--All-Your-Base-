@@ -70,6 +70,7 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->N = new_MAT(NBASE,ncycle);
     ayb->At = new_MAT(NBASE*ncycle,NBASE*ncycle);
     ayb->lambda = new_MAT(ncluster,1);
+    ayb->lss = new_MAT(ncluster,1);
     ayb->we = new_MAT(ncluster,1);
     ayb->cycle_var = new_MAT(4*ncycle,1);
 
@@ -80,7 +81,7 @@ AYB new_AYB(const uint32_t ncycle, const uint32_t ncluster){
     ayb->index = 0;
     ayb->readnum = 0;    
     
-    if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M ||
+    if( NULL==ayb->intensities.elt || NULL==ayb->bases.elt || NULL==ayb->M || NULL==ayb->lss ||
         NULL==ayb->P || NULL==ayb->N || NULL==ayb->lambda  || NULL==ayb->passed_filter || NULL==ayb->At){
         goto cleanup;
     }
@@ -106,6 +107,7 @@ void free_AYB(AYB ayb){
     free_MAT(ayb->we);
     free_MAT(ayb->cycle_var);
     free_MAT(ayb->lambda);
+    free_MAT(ayb->lss);
     xfree(ayb->passed_filter);
     free_COORD(ayb->coordinates);
     xfree(ayb);
@@ -148,6 +150,9 @@ AYB copy_AYB(const AYB ayb){
     
     ayb_copy->lambda = copy_MAT(ayb->lambda);
     if(NULL!=ayb->lambda && NULL==ayb_copy->lambda){ goto cleanup;}
+
+    ayb_copy->lss = copy_MAT(ayb->lss);
+    if(NULL!=ayb->lss && NULL==ayb_copy->lss){ goto cleanup;}
     
     ayb_copy->filtered = ayb->filtered;
     ayb_copy->passed_filter = calloc(ayb->ncluster,sizeof(bool));
@@ -226,6 +231,7 @@ AYB initialise_AYB(const CIFDATA cif){
     /* Initial weights and cycles are all equal. Arbitrarily one */
     set_MAT(ayb->we,1.);
     set_MAT(ayb->cycle_var,1.0);
+    set_MAT(ayb->lss,4*ayb->ncycle);
     
     /*  Call bases and lambda for each cluster */
     //MAT invAt = invert(ayb->At); //transpose(ayb->A);
@@ -411,6 +417,7 @@ real_t estimate_Bases(AYB ayb, const bool lastIt){
     PHREDCHAR * phred = NULL;
     MAT pcl_int[ncpu];
     for ( int i=0 ; i<ncpu ; i++){ pcl_int[i] = NULL; }
+    real_t effDF = median(ayb->lss->x,ncluster);
     #pragma omp parallel for \
       default(shared) private(cl,bases,phred,th_id)
     for ( cl=0 ; cl<ncluster ; cl++){
@@ -421,9 +428,9 @@ real_t estimate_Bases(AYB ayb, const bool lastIt){
 	pcl_int[th_id] =  processNew( AtLU, ayb->N, ayb->intensities.elt+cl*ayb->ncycle*NBASE, pcl_int[th_id]);
 	ayb->lambda->x[cl] = estimate_lambda_A ( ayb->intensities.elt+cl*ayb->ncycle*NBASE, ayb->N, ayb->At, bases,  ayb->ncycle);
 	// Call bases
-	call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases);
+	ayb->lss->x[cl] = call_base(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases);
 	if(lastIt){
-		call_qualities(pcl_int[th_id],ayb->lambda->x[cl],gblOmega,bases,qual);
+		call_qualities_post(pcl_int[th_id],ayb->lambda->x[cl],  gblOmega, effDF, bases, qual);
 		qual[0] = adjust_first_quality(qual[0], bases[0], bases[1]);
 		for ( int i=1 ; i<(ncycle-1) ; i++){
 			qual[i] = adjust_quality(qual[i], bases[i-1], bases[i], bases[i+1]);
