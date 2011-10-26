@@ -31,7 +31,7 @@
 #include "options.h"
 #include "lapack.h"
 
-#include "tables/hiseqCal2.h"
+#include "tables/76cyL2.h"
 
 const static real_t polyQual = 38.0;
 
