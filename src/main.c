@@ -530,6 +530,7 @@ int main(int argc, char * argv[]){
     omp_set_num_threads(aybopt.ncpu);
     int nthr = omp_get_max_threads();
     fprintf(stderr,"Going to use %d thread%s (set %d).\n",nthr,nthr==1?"":"s",aybopt.ncpu);
+    fprintf(stderr,"Using calibration file " CALIBRATION_FILE "\n");
     
     // Validate arguments
     if( aybopt.output_format==OUTPUT_QSEQ && aybopt.coordinate_file==NULL){

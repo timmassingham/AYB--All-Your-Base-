@@ -31,7 +31,7 @@
 #include "options.h"
 #include "lapack.h"
 
-#include "tables/76cyL2.h"
+#include CALIBRATION_FILE
 
 const static real_t polyQual = 38.0;
 

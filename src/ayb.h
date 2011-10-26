@@ -30,6 +30,8 @@
 #include "array.def"
 #undef X
 
+#define CALIBRATION_FILE "tables/76cyL2.h"
+
 
 typedef struct {
     uint32_t ncycle,ncluster;
