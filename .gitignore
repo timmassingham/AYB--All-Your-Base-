@@ -3,3 +3,4 @@ test/
 bin/
 *~
 *.o
+.DS_Store
