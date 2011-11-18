@@ -240,9 +240,10 @@ void dump_fastq(FILE * fp, const AYB ayb){
     validate(NULL!=ayb,);
     const uint32_t ncycle = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
+    char * pref = aybopt.machine_name?aybopt.machine_name:"cluster";
     
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
-        fprintf(fp,"@cluster_%u\n",cl+1);
+        fprintf(fp,"@%s_%u\n",pref,cl+1);
         for ( uint32_t cy=0 ; cy<ncycle ; cy++){
             show_NUC(fp,ayb->bases.elt[cl*ncycle+cy]);
         }
@@ -259,9 +260,10 @@ void dump_fasta(FILE * fp, const AYB ayb){
     validate(NULL!=ayb,);
     const uint32_t ncycle = ayb->ncycle;
     const uint32_t ncluster = ayb->ncluster;
+    char * pref = aybopt.machine_name?aybopt.machine_name:"cluster";
     
     for ( uint32_t cl=0 ; cl<ncluster ; cl++){
-        fprintf(fp,">cluster_%u\n",cl+1);
+        fprintf(fp,">%s_%u\n",pref,cl+1);
         for ( uint32_t cy=0 ; cy<ncycle ; cy++){
             show_NUC(fp,ayb->bases.elt[cl*ncycle+cy]);
         }
